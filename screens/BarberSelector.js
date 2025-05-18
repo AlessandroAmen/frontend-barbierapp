@@ -235,7 +235,7 @@ const BarberSelector = ({ navigation }) => {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Seleziona il tuo Barbiere</Text>
-      
+
       {/* Dropdown per la regione */}
       <TouchableOpacity 
         style={styles.dropdown}

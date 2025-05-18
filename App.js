@@ -10,6 +10,10 @@ import RegisterScreen from './screens/RegisterScreen';
 import HomeScreen from './screens/HomeScreen';
 import BarberSelector from './screens/BarberSelector';
 import BarberHome from './screens/BarberHome';
+import BookAppointment from './screens/BookAppointment';
+import ModifyAppointment from './screens/ModifyAppointment';
+import Products from './screens/Products';
+import Contacts from './screens/Contacts';
 
 const Stack = createNativeStackNavigator();
 
@@ -90,6 +94,26 @@ const App = () => {
             title: route.params?.barber?.shop_name || 'Dettagli Barbiere',
             headerBackTitle: 'Indietro',
           })}
+        />
+        <Stack.Screen 
+          name="BookAppointment" 
+          component={BookAppointment} 
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="ModifyAppointment" 
+          component={ModifyAppointment} 
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="Products" 
+          component={Products} 
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="Contacts" 
+          component={Contacts} 
+          options={{ headerShown: false }}
         />
       </Stack.Navigator>
     </NavigationContainer>

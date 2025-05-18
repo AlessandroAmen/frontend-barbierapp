@@ -13,7 +13,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 
-const BarberHome = ({ route, navigation }) => {
+const Contacts = ({ route, navigation }) => {
   const [barber, setBarber] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -55,20 +55,17 @@ const BarberHome = ({ route, navigation }) => {
     }
   };
 
-  const navigateToAppointment = () => {
-    navigation.navigate('BookAppointment', { barber });
+  const handleEmail = () => {
+    if (barber?.email) {
+      Linking.openURL(`mailto:${barber.email}`);
+    }
   };
 
-  const navigateToModifyAppointment = () => {
-    navigation.navigate('ModifyAppointment', { barber });
-  };
-
-  const navigateToProducts = () => {
-    navigation.navigate('Products', { barber });
-  };
-
-  const navigateToContacts = () => {
-    navigation.navigate('Contacts', { barber });
+  const handleDirections = () => {
+    if (barber?.address) {
+      const address = encodeURIComponent(barber.address);
+      Linking.openURL(`https://maps.google.com/?q=${address}`);
+    }
   };
 
   if (loading) {
@@ -115,75 +112,87 @@ const BarberHome = ({ route, navigation }) => {
         </View>
       </View>
       
-      {/* Menu circolare con 4 opzioni */}
-      <View style={styles.menuContainer}>
-        <View style={styles.menuRow}>
-          <TouchableOpacity style={styles.menuItem} onPress={navigateToAppointment}>
-            <View style={styles.menuCircle}>
-              <Ionicons name="calendar" size={32} color="white" />
-            </View>
-            <Text style={styles.menuText}>Prenota</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.menuItem} onPress={navigateToModifyAppointment}>
-            <View style={styles.menuCircle}>
-              <Ionicons name="create" size={32} color="white" />
-            </View>
-            <Text style={styles.menuText}>Modifica</Text>
-          </TouchableOpacity>
-        </View>
+      <View style={styles.contactsContainer}>
+        <Text style={styles.sectionTitle}>Informazioni di contatto</Text>
         
-        <View style={styles.menuRow}>
-          <TouchableOpacity style={styles.menuItem} onPress={navigateToProducts}>
-            <View style={styles.menuCircle}>
-              <Ionicons name="cart" size={32} color="white" />
-            </View>
-            <Text style={styles.menuText}>Prodotti</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.menuItem} onPress={navigateToContacts}>
-            <View style={styles.menuCircle}>
-              <Ionicons name="call" size={32} color="white" />
-            </View>
-            <Text style={styles.menuText}>Contatti</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-      
-      <View style={styles.detailsContainer}>
-        <View style={styles.detailItem}>
-          <Ionicons name="location" size={24} color="#007bff" style={styles.icon} />
-          <Text style={styles.detailText}>{barber.address}</Text>
-        </View>
-        
-        <TouchableOpacity style={styles.detailItem} onPress={handleCall}>
-          <Ionicons name="call" size={24} color="#007bff" style={styles.icon} />
-          <Text style={styles.detailText}>{barber.phone}</Text>
+        <TouchableOpacity style={styles.contactItem} onPress={handleCall}>
+          <View style={styles.contactIconContainer}>
+            <Ionicons name="call" size={24} color="white" />
+          </View>
+          <View style={styles.contactInfo}>
+            <Text style={styles.contactLabel}>Telefono</Text>
+            <Text style={styles.contactValue}>{barber.phone}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="#999" />
         </TouchableOpacity>
         
         {barber.email && (
-          <View style={styles.detailItem}>
-            <Ionicons name="mail" size={24} color="#007bff" style={styles.icon} />
-            <Text style={styles.detailText}>{barber.email}</Text>
-          </View>
+          <TouchableOpacity style={styles.contactItem} onPress={handleEmail}>
+            <View style={styles.contactIconContainer}>
+              <Ionicons name="mail" size={24} color="white" />
+            </View>
+            <View style={styles.contactInfo}>
+              <Text style={styles.contactLabel}>Email</Text>
+              <Text style={styles.contactValue}>{barber.email}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={24} color="#999" />
+          </TouchableOpacity>
         )}
         
-        {barber.opening_time && barber.closing_time && (
-          <View style={styles.detailItem}>
-            <Ionicons name="time" size={24} color="#007bff" style={styles.icon} />
-            <Text style={styles.detailText}>
-              Orari: {barber.opening_time} - {barber.closing_time}
+        <TouchableOpacity style={styles.contactItem} onPress={handleDirections}>
+          <View style={styles.contactIconContainer}>
+            <Ionicons name="location" size={24} color="white" />
+          </View>
+          <View style={styles.contactInfo}>
+            <Text style={styles.contactLabel}>Indirizzo</Text>
+            <Text style={styles.contactValue}>{barber.address}</Text>
+            <Text style={styles.contactSubValue}>
+              {barber.comune}, {barber.provincia}, {barber.regione}
             </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="#999" />
+        </TouchableOpacity>
+        
+        {barber.opening_time && barber.closing_time && (
+          <View style={styles.contactItem}>
+            <View style={styles.contactIconContainer}>
+              <Ionicons name="time" size={24} color="white" />
+            </View>
+            <View style={styles.contactInfo}>
+              <Text style={styles.contactLabel}>Orari di apertura</Text>
+              <Text style={styles.contactValue}>
+                {barber.opening_time} - {barber.closing_time}
+              </Text>
+            </View>
           </View>
         )}
       </View>
       
       {barber.description && (
         <View style={styles.descriptionContainer}>
-          <Text style={styles.descriptionTitle}>Descrizione</Text>
+          <Text style={styles.sectionTitle}>Chi siamo</Text>
           <Text style={styles.descriptionText}>{barber.description}</Text>
         </View>
       )}
+      
+      <View style={styles.mapContainer}>
+        <Text style={styles.sectionTitle}>Dove siamo</Text>
+        <View style={styles.mapPlaceholder}>
+          <Ionicons name="map" size={50} color="#ccc" />
+          <Text style={styles.mapPlaceholderText}>Mappa non disponibile</Text>
+          <Text style={styles.mapAddress}>{barber.address}</Text>
+          <TouchableOpacity style={styles.directionsButton} onPress={handleDirections}>
+            <Text style={styles.directionsButtonText}>Ottieni indicazioni</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+      
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => navigation.goBack()}
+      >
+        <Text style={styles.backButtonText}>Torna indietro</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 };
@@ -222,15 +231,15 @@ const styles = StyleSheet.create({
     borderBottomColor: '#eee',
   },
   image: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     marginBottom: 15,
   },
   imagePlaceholder: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     backgroundColor: '#f0f0f0',
     justifyContent: 'center',
     alignItems: 'center',
@@ -240,58 +249,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   shopName: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#333',
     marginBottom: 5,
     textAlign: 'center',
   },
   name: {
-    fontSize: 18,
+    fontSize: 16,
     color: '#666',
     marginBottom: 5,
   },
-  // Stili per il menu circolare
-  menuContainer: {
-    backgroundColor: 'white',
-    margin: 15,
-    padding: 20,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  menuRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 20,
-  },
-  menuItem: {
-    alignItems: 'center',
-    width: '40%',
-  },
-  menuCircle: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: '#007bff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-  },
-  menuText: {
-    fontSize: 14,
+  sectionTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
+    marginBottom: 15,
   },
-  detailsContainer: {
+  contactsContainer: {
     backgroundColor: 'white',
     margin: 15,
     padding: 15,
@@ -302,18 +277,38 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  detailItem: {
+  contactItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 15,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
   },
-  icon: {
-    marginRight: 10,
+  contactIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#007bff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
   },
-  detailText: {
+  contactInfo: {
+    flex: 1,
+  },
+  contactLabel: {
+    fontSize: 14,
+    color: '#999',
+  },
+  contactValue: {
     fontSize: 16,
     color: '#333',
-    flex: 1,
+    fontWeight: '500',
+  },
+  contactSubValue: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 2,
   },
   descriptionContainer: {
     backgroundColor: 'white',
@@ -325,18 +320,66 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-    marginBottom: 30,
-  },
-  descriptionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    color: '#333',
   },
   descriptionText: {
     fontSize: 16,
     color: '#555',
     lineHeight: 22,
+  },
+  mapContainer: {
+    backgroundColor: 'white',
+    margin: 15,
+    padding: 15,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  mapPlaceholder: {
+    height: 200,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  mapPlaceholderText: {
+    fontSize: 16,
+    color: '#999',
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  mapAddress: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 15,
+  },
+  directionsButton: {
+    backgroundColor: '#007bff',
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 5,
+  },
+  directionsButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  backButton: {
+    backgroundColor: '#007bff',
+    margin: 15,
+    padding: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  backButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   button: {
     backgroundColor: '#007bff',
@@ -351,4 +394,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default BarberHome; 
+export default Contacts; 
