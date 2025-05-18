@@ -14,7 +14,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // L'URL del tuo backend Laravel
-const API_URL = 'http://localhost:8000/api';
+const API_URL = 'http://127.0.0.1:8000/api';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -51,7 +51,7 @@ const LoginScreen = ({ navigation }) => {
       if (response.status === 500) {
         throw new Error('Errore del server. Controlla la connessione al backend.');
       }
-      
+
       const data = await response.json();
       console.log('Risposta ricevuta:', data);
 
@@ -70,7 +70,7 @@ const LoginScreen = ({ navigation }) => {
         } else if (response.status === 401) {
           throw new Error('Credenziali non valide. Controlla email e password.');
         } else {
-          throw new Error(data.message || 'Errore durante il login');
+        throw new Error(data.message || 'Errore durante il login');
         }
       }
 
@@ -82,8 +82,8 @@ const LoginScreen = ({ navigation }) => {
       setEmail('');
       setPassword('');
       
-      // Naviga alla schermata principale
-      navigation.navigate('Home');
+      // Naviga alla schermata di selezione barbiere
+      navigation.navigate('BarberSelector');
     } catch (error) {
       console.error('Errore login:', error);
       Alert.alert('Errore di Login', error.message || 'Si è verificato un errore durante il login');

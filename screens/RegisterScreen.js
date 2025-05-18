@@ -92,8 +92,8 @@ const RegisterScreen = ({ navigation }) => {
       setPassword('');
       setConfirmPassword('');
       
-      // Naviga alla schermata principale
-      navigation.navigate('Home');
+      // Naviga alla schermata di selezione barbiere
+      navigation.navigate('BarberSelector');
     } catch (error) {
       console.error('Errore registrazione:', error);
       Alert.alert('Errore di Registrazione', error.message || 'Si è verificato un errore durante la registrazione');

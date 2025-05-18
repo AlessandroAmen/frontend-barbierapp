@@ -8,6 +8,8 @@ import { View, ActivityIndicator } from 'react-native';
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
 import HomeScreen from './screens/HomeScreen';
+import BarberSelector from './screens/BarberSelector';
+import BarberHome from './screens/BarberHome';
 
 const Stack = createNativeStackNavigator();
 
@@ -44,10 +46,10 @@ const App = () => {
   return (
     <NavigationContainer>
       <Stack.Navigator
-        initialRouteName={userToken ? 'Home' : 'Login'}
+        initialRouteName={userToken ? 'BarberSelector' : 'Login'}
         screenOptions={{
           headerStyle: {
-            backgroundColor: '#f4511e',
+            backgroundColor: '#007bff',
           },
           headerTintColor: '#fff',
           headerTitleStyle: {
@@ -70,9 +72,24 @@ const App = () => {
           component={HomeScreen}
           options={{ 
             title: 'Home',
-            // Impedisci il ritorno alla schermata di login con il pulsante back
             headerBackVisible: false,
           }}
+        />
+        <Stack.Screen 
+          name="BarberSelector" 
+          component={BarberSelector}
+          options={{ 
+            title: 'Scegli il Barbiere',
+            headerBackVisible: userToken ? false : true,
+          }}
+        />
+        <Stack.Screen 
+          name="BarberHome" 
+          component={BarberHome}
+          options={({ route }) => ({ 
+            title: route.params?.barber?.shop_name || 'Dettagli Barbiere',
+            headerBackTitle: 'Indietro',
+          })}
         />
       </Stack.Navigator>
     </NavigationContainer>
