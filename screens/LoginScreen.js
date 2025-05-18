@@ -31,6 +31,8 @@ const LoginScreen = ({ navigation }) => {
     try {
       setLoading(true);
       
+      console.log('Tentativo di login con:', { email });
+      
       // Effettua la richiesta di login al backend Laravel
       const response = await fetch(`${API_URL}/login`, {
         method: 'POST',
@@ -44,10 +46,32 @@ const LoginScreen = ({ navigation }) => {
         }),
       });
 
+      console.log('Status risposta:', response.status);
+      
+      if (response.status === 500) {
+        throw new Error('Errore del server. Controlla la connessione al backend.');
+      }
+      
       const data = await response.json();
+      console.log('Risposta ricevuta:', data);
 
       if (!response.ok) {
-        throw new Error(data.message || 'Errore durante il login');
+        if (response.status === 422) {
+          // Errore di validazione
+          let errorMessage = 'Errori di validazione:';
+          if (data.errors) {
+            Object.keys(data.errors).forEach(key => {
+              errorMessage += `\n- ${data.errors[key].join(', ')}`;
+            });
+          } else if (data.message) {
+            errorMessage = data.message;
+          }
+          throw new Error(errorMessage);
+        } else if (response.status === 401) {
+          throw new Error('Credenziali non valide. Controlla email e password.');
+        } else {
+          throw new Error(data.message || 'Errore durante il login');
+        }
       }
 
       // Salva il token di autenticazione
@@ -61,7 +85,8 @@ const LoginScreen = ({ navigation }) => {
       // Naviga alla schermata principale
       navigation.navigate('Home');
     } catch (error) {
-      Alert.alert('Errore di Login', error.message);
+      console.error('Errore login:', error);
+      Alert.alert('Errore di Login', error.message || 'Si è verificato un errore durante il login');
     } finally {
       setLoading(false);
     }

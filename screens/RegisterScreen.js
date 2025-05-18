@@ -35,8 +35,15 @@ const RegisterScreen = ({ navigation }) => {
       return;
     }
 
+    if (password.length < 8) {
+      Alert.alert('Errore', 'La password deve essere di almeno 8 caratteri');
+      return;
+    }
+
     try {
       setLoading(true);
+      
+      console.log('Tentativo di registrazione con:', { name, email });
       
       // Effettua la richiesta di registrazione al backend Laravel
       const response = await fetch(`${API_URL}/register`, {
@@ -49,13 +56,30 @@ const RegisterScreen = ({ navigation }) => {
           name,
           email,
           password,
+          password_confirmation: confirmPassword,
         }),
       });
 
+      console.log('Status risposta:', response.status);
+      
       const data = await response.json();
+      console.log('Risposta ricevuta:', data);
 
       if (!response.ok) {
-        throw new Error(data.message || 'Errore durante la registrazione');
+        if (response.status === 422) {
+          // Errore di validazione
+          let errorMessage = 'Errori di validazione:';
+          if (data.errors) {
+            Object.keys(data.errors).forEach(key => {
+              errorMessage += `\n- ${data.errors[key].join(', ')}`;
+            });
+          } else if (data.message) {
+            errorMessage = data.message;
+          }
+          throw new Error(errorMessage);
+        } else {
+          throw new Error(data.message || 'Errore durante la registrazione');
+        }
       }
 
       // Salva il token di autenticazione
@@ -71,7 +95,8 @@ const RegisterScreen = ({ navigation }) => {
       // Naviga alla schermata principale
       navigation.navigate('Home');
     } catch (error) {
-      Alert.alert('Errore di Registrazione', error.message);
+      console.error('Errore registrazione:', error);
+      Alert.alert('Errore di Registrazione', error.message || 'Si è verificato un errore durante la registrazione');
     } finally {
       setLoading(false);
     }
