@@ -9,9 +9,7 @@ import {
   SafeAreaView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// L'URL del tuo backend Laravel
-const API_URL = 'http://localhost:8000/api';
+import { API_URL } from '../utils/apiConfig';
 
 const HomeScreen = ({ navigation }) => {
   const [user, setUser] = useState(null);

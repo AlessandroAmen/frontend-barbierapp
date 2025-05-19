@@ -1,10 +1,9 @@
 // BarberSelector.js
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView, Image, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView, Image, Modal, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// L'URL del tuo backend Laravel
-const API_URL = 'http://localhost:8000/api';
+import * as ExpoConstants from 'expo-constants';
+import { API_URL } from '../utils/apiConfig';
 
 // Array di regioni e province italiane
 const regioniProvince = [
@@ -130,6 +129,7 @@ const BarberSelector = ({ navigation }) => {
     setError('');
     try {
       console.log('Tentativo di connessione a:', `${API_URL}/barbers-test`);
+      console.log('API_URL configurato:', API_URL);
       
       const response = await fetch(`${API_URL}/barbers-test`, {
         headers: {
@@ -141,7 +141,9 @@ const BarberSelector = ({ navigation }) => {
       console.log('Status risposta:', response.status);
       
       if (!response.ok) {
-        throw new Error(`Errore nel caricamento dei barbieri: ${response.status}`);
+        const errorText = await response.text();
+        console.error('Risposta errore:', errorText);
+        throw new Error(`Errore nel caricamento dei barbieri: ${response.status} - ${errorText}`);
       }
       
       const data = await response.json();
@@ -161,6 +163,7 @@ const BarberSelector = ({ navigation }) => {
       setBarbers(barbersData);
     } catch (err) {
       console.error('Errore dettagliato:', err);
+      console.error('Stack trace:', err.stack);
       
       // Verifica se è un errore di rete
       if (err.message.includes('Network request failed')) {

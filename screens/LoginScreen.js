@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,14 +12,77 @@ import {
   SafeAreaView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// L'URL del tuo backend Laravel
-const API_URL = 'http://127.0.0.1:8000/api';
+import { API_URL } from '../utils/apiConfig';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('');
+
+  // Test della connessione API all'avvio
+  useEffect(() => {
+    testApiConnection();
+  }, []);
+
+  // Funzione per testare la connessione API
+  const testApiConnection = async () => {
+    try {
+      setConnectionStatus('Verifica connessione...');
+      
+      /* Commento la parte che genera l'errore 404
+      // Prima prova la rotta API
+      console.log('Test connessione API a:', `${API_URL}/android-test`);
+      
+      try {
+        const response = await fetch(`${API_URL}/android-test`, {
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        console.log('Test connessione API status:', response.status);
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Test connessione API risposta:', data);
+          setConnectionStatus('Connessione API OK');
+          return;
+        } else {
+          console.error('Test connessione API fallito:', response.status);
+        }
+      } catch (apiError) {
+        console.error('Errore test API:', apiError);
+      }
+      */
+      
+      // Utilizza direttamente la rotta web che funziona
+      const baseUrl = API_URL.replace('/api', '');
+      console.log('Test connessione web a:', `${baseUrl}/test-connection`);
+      
+      const webResponse = await fetch(`${baseUrl}/test-connection`, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      console.log('Test connessione web status:', webResponse.status);
+      
+      if (webResponse.ok) {
+        const webData = await webResponse.json();
+        console.log('Test connessione web risposta:', webData);
+        setConnectionStatus('Connessione OK');
+      } else {
+        console.error('Test connessione web fallito:', webResponse.status);
+        setConnectionStatus(`Errore connessione: ${webResponse.status}`);
+      }
+    } catch (error) {
+      console.error('Test connessione errore generale:', error);
+      setConnectionStatus(`Errore connessione: ${error.message}`);
+    }
+  };
 
   const handleLogin = async () => {
     // Validazione base
@@ -105,6 +168,12 @@ const LoginScreen = ({ navigation }) => {
         <View style={styles.formContainer}>
           <Text style={styles.title}>Accedi</Text>
           
+          {connectionStatus ? (
+            <Text style={connectionStatus.includes('Errore') ? styles.errorText : styles.successText}>
+              {connectionStatus}
+            </Text>
+          ) : null}
+          
           <TextInput
             style={styles.input}
             placeholder="Email"
@@ -140,6 +209,15 @@ const LoginScreen = ({ navigation }) => {
           >
             <Text style={styles.registerText}>
               Non hai un account? Registrati
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={styles.testButton}
+            onPress={testApiConnection}
+          >
+            <Text style={styles.testButtonText}>
+              Test Connessione
             </Text>
           </TouchableOpacity>
         </View>
@@ -198,6 +276,24 @@ const styles = StyleSheet.create({
   registerText: {
     color: '#007bff',
     fontSize: 14,
+  },
+  testButton: {
+    marginTop: 20,
+    padding: 10,
+  },
+  testButtonText: {
+    color: '#666',
+    fontSize: 12,
+  },
+  errorText: {
+    color: 'red',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  successText: {
+    color: 'green',
+    marginBottom: 15,
+    textAlign: 'center',
   },
 });
 
