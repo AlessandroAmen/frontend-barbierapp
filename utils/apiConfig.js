@@ -1,29 +1,14 @@
-import { Platform } from 'react-native';
+// ⚠️ DEPRECATED: Use config.js instead 
+// This file is kept for backward compatibility only
 
-// Funzione per ottenere l'URL dell'API in base alla piattaforma
-export const getApiUrl = () => {
-  if (Platform.OS === 'web') {
-    return 'http://localhost:8001/api';
-  } else if (Platform.OS === 'ios') {
-    // Per iOS simulator
-    return 'http://127.0.0.1:8001/api';
-  } else if (Platform.OS === 'android') {
-    // Per Android emulator, prova con l'IP diretto della macchina sulla rete locale
-    // Questo è il metodo più affidabile per i dispositivi fisici e alcuni emulatori
-    return 'http://192.168.1.45:8001/api';
-    
-    // Alternative per Android emulator:
-    // return 'http://10.0.2.2:8001/api'; // Indirizzo standard per emulatore Android
-    // return 'http://localhost:8001/api'; // Alcuni emulatori potrebbero usare localhost
-  } else {
-    // Fallback
-    return 'http://127.0.0.1:8001/api';
-  }
-};
+import { API_URL as API_URL_FROM_CONFIG, 
+         DIRECT_API_URL, 
+         getApiPath as getApiPathFromConfig } from './config';
 
-// Esporta l'URL dell'API come costante per un uso più semplice
-export const API_URL = getApiUrl();
+// Re-export with backward compatible names
+export const API_URL = API_URL_FROM_CONFIG;
+export const NEW_API_URL = DIRECT_API_URL;
+export const getApiPath = getApiPathFromConfig;
 
-// Log dell'URL API per debug
-console.log('Platform OS:', Platform.OS);
-console.log('API URL configurato:', API_URL); 
+// Log deprecation warning
+console.warn('⚠️ apiConfig.js is deprecated. Import directly from config.js instead.'); 

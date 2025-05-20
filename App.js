@@ -16,20 +16,32 @@ import BookAppointment from './screens/BookAppointment';
 import ModifyAppointment from './screens/ModifyAppointment';
 import Products from './screens/Products';
 import Contacts from './screens/Contacts';
+import ManagerDashboard from './screens/ManagerDashboard';
+import BarberDashboard from './screens/BarberDashboard';
+
+// Importa il bottone profilo
+import ProfileButton from './components/ProfileButton';
 
 const Stack = createNativeStackNavigator();
 
 const App = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [userToken, setUserToken] = useState(null);
+  const [userData, setUserData] = useState(null);
 
   useEffect(() => {
     // Verifica se l'utente è già autenticato
     const bootstrapAsync = async () => {
       let token = null;
+      let userData = null;
       
       try {
         token = await AsyncStorage.getItem('userToken');
+        const userDataString = await AsyncStorage.getItem('userData');
+        if (userDataString) {
+          userData = JSON.parse(userDataString);
+          setUserData(userData);
+        }
       } catch (e) {
         console.error('Errore nel recupero del token:', e);
       }
@@ -40,6 +52,43 @@ const App = () => {
 
     bootstrapAsync();
   }, []);
+
+  // Determina la schermata iniziale in base al ruolo dell'utente
+  const getInitialRouteName = () => {
+    if (!userToken) return 'Login';
+    
+    if (userData) {
+      switch (userData.role) {
+        case 'admin':
+          return 'AdminDashboard';
+        case 'manager':
+          return 'ManagerDashboard';
+        case 'barber':
+          return 'BarberDashboard';
+        default:
+          return 'BarberSelector';
+      }
+    }
+    
+    return 'BarberSelector';
+  };
+
+  // Configurazione header con ProfileButton
+  const getScreenOptions = ({ route }) => {
+    const isAuthScreen = route.name === 'Login' || route.name === 'Register';
+    
+    return {
+      headerStyle: {
+        backgroundColor: '#007bff',
+      },
+      headerTintColor: '#fff',
+      headerTitleStyle: {
+        fontWeight: 'bold',
+      },
+      // Aggiungi il ProfileButton solo se non è una schermata di autenticazione
+      headerRight: isAuthScreen ? undefined : () => <ProfileButton />,
+    };
+  };
 
   if (isLoading) {
     return (
@@ -53,16 +102,8 @@ const App = () => {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <NavigationContainer>
         <Stack.Navigator
-          initialRouteName={userToken ? 'BarberSelector' : 'Login'}
-          screenOptions={{
-            headerStyle: {
-              backgroundColor: '#007bff',
-            },
-            headerTintColor: '#fff',
-            headerTitleStyle: {
-              fontWeight: 'bold',
-            },
-          }}
+          initialRouteName={getInitialRouteName()}
+          screenOptions={getScreenOptions}
         >
           <Stack.Screen 
             name="Login" 
@@ -101,22 +142,40 @@ const App = () => {
           <Stack.Screen 
             name="BookAppointment" 
             component={BookAppointment} 
-            options={{ headerShown: false }}
+            options={{ headerShown: true, title: 'Prenota Appuntamento' }}
           />
           <Stack.Screen 
             name="ModifyAppointment" 
             component={ModifyAppointment} 
-            options={{ headerShown: false }}
+            options={{ headerShown: true, title: 'Modifica Appuntamento' }}
           />
           <Stack.Screen 
             name="Products" 
             component={Products} 
-            options={{ headerShown: false }}
+            options={{ headerShown: true, title: 'Prodotti' }}
           />
           <Stack.Screen 
             name="Contacts" 
             component={Contacts} 
-            options={{ headerShown: false }}
+            options={{ headerShown: true, title: 'Contatti' }}
+          />
+          <Stack.Screen 
+            name="ManagerDashboard" 
+            component={ManagerDashboard} 
+            options={{ 
+              headerShown: true,
+              headerBackVisible: false,
+              title: 'Dashboard Manager'
+            }}
+          />
+          <Stack.Screen 
+            name="BarberDashboard" 
+            component={BarberDashboard} 
+            options={{ 
+              headerShown: true,
+              headerBackVisible: false,
+              title: 'Dashboard Barbiere'
+            }}
           />
         </Stack.Navigator>
       </NavigationContainer>

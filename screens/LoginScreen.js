@@ -133,25 +133,63 @@ const LoginScreen = ({ navigation }) => {
         } else if (response.status === 401) {
           throw new Error('Credenziali non valide. Controlla email e password.');
         } else {
-        throw new Error(data.message || 'Errore durante il login');
+          throw new Error(data.message || 'Errore durante il login');
         }
       }
 
       // Salva il token di autenticazione
       await AsyncStorage.setItem('userToken', data.access_token);
       await AsyncStorage.setItem('userData', JSON.stringify(data.user));
+      // Salva l'email dell'utente per il ProfileButton
+      await AsyncStorage.setItem('userEmail', email);
+      
+      // Salva anche il ruolo utente per uso futuro
+      await AsyncStorage.setItem('userRole', data.user.role || 'customer');
 
       // Reimposta i campi
       setEmail('');
       setPassword('');
       
-      // Naviga alla schermata di selezione barbiere
-      navigation.navigate('BarberSelector');
+      // Naviga alla schermata appropriata in base al ruolo dell'utente
+      navigateBasedOnRole(data.user);
     } catch (error) {
       console.error('Errore login:', error);
       Alert.alert('Errore di Login', error.message || 'Si è verificato un errore durante il login');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Funzione per navigare in base al ruolo dell'utente
+  const navigateBasedOnRole = (user) => {
+    switch (user.role) {
+      case 'admin':
+        // Amministratore: va alla dashboard di amministrazione
+        navigation.navigate('AdminDashboard');
+        break;
+      case 'manager':
+        // Gestore: va direttamente alla sua barberia
+        if (user.barber_shop) {
+          navigation.navigate('ManagerDashboard', { barberShop: user.barber_shop, barbers: user.barbers });
+        } else {
+          Alert.alert('Errore', 'Nessuna barberia associata al tuo account');
+          navigation.navigate('BarberSelector'); // Fallback
+        }
+        break;
+      case 'barber':
+        // Barbiere: va direttamente alla sua agenda
+        if (user.barber_shop) {
+          navigation.navigate('BarberDashboard', { barberShop: user.barber_shop });
+        } else {
+          Alert.alert('Errore', 'Nessuna barberia associata al tuo account');
+          navigation.navigate('BarberSelector'); // Fallback
+        }
+        break;
+      case 'customer':
+      default:
+        // Cliente normale: va alla selezione barbiere come al solito
+        navigation.navigate('BarberSelector');
+        break;
     }
   };
 

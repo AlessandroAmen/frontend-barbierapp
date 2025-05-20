@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,14 +6,504 @@ import {
   Image,
   TouchableOpacity,
   ScrollView,
+  ActivityIndicator,
+  FlatList,
+  Alert,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Calendar } from 'react-native-calendars';
+import { API_URL, NEW_API_URL, getApiPath } from '../utils/apiConfig';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BookAppointment = ({ route, navigation }) => {
   const { barber } = route.params;
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [timeSlots, setTimeSlots] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [markedDates, setMarkedDates] = useState({});
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState(null);
+  const [selectedBarber, setSelectedBarber] = useState(null);
+  const [shopBarbers, setShopBarbers] = useState([]);
+  const [loadingBarbers, setLoadingBarbers] = useState(false);
+  const [token, setToken] = useState(null);
+
+  useEffect(() => {
+    // Carica il token e i barbieri all'avvio
+    const setupComponent = async () => {
+      const userToken = await AsyncStorage.getItem('userToken');
+      setToken(userToken);
+      loadShopBarbers(userToken);
+    };
+    
+    setupComponent();
+  }, []);
+
+  // Carica i barbieri dal server
+  const loadShopBarbers = async (userToken) => {
+    setLoadingBarbers(true);
+    
+    try {
+      let allBarbers = [];
+      
+      // 1. Carica i barbieri dal modello Barber
+      const response1 = await fetch(`${API_URL}/barbers-test`, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response1.ok) {
+        const barberModelData = await response1.json();
+        allBarbers = [...barberModelData];
+      }
+      
+      // 2. Carica gli utenti con ruolo barbiere (se c'è il token)
+      if (userToken) {
+        try {
+          const response2 = await fetch(`${API_URL}/users/role/barber`, {
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${userToken}`
+            }
+          });
+          
+          if (response2.ok) {
+            const userModelData = await response2.json();
+            // Aggiungi i barbieri dal modello User
+            userModelData.forEach(userBarber => {
+              // Evita duplicati, verifica che non esista già un barbiere con lo stesso ID
+              if (!allBarbers.some(b => b.id === userBarber.id)) {
+                allBarbers.push(userBarber);
+              }
+            });
+          }
+        } catch (err) {
+          console.log('Errore nel caricamento degli utenti barbieri:', err);
+        }
+      }
+      
+      if (allBarbers.length === 0) {
+        throw new Error('Nessun barbiere trovato');
+      }
+      
+      // Filtra i barbieri per lo stesso barber_shop_id o mostra tutti
+      const shopId = barber.id;
+      
+      // Filtra in base al modello (Barber o User)
+      const filteredBarbers = allBarbers.filter(b => {
+        if ('barber_shop_id' in b) {
+          // È un User-Barber
+          return b.barber_shop_id == shopId;
+        } else {
+          // È un Barber
+          return b.id == shopId;
+        }
+      });
+      
+      // Se non ci sono barbieri associati al negozio o se sono troppo pochi, usa tutti
+      let barbersToUse = filteredBarbers.length >= 2 ? filteredBarbers : allBarbers;
+      
+      // Limita a massimo 3 barbieri per non sovraccaricare l'interfaccia
+      if (barbersToUse.length > 3) {
+        barbersToUse = barbersToUse.slice(0, 3);
+      }
+      
+      // Aggiungi informazioni di orari di lavoro per ogni barbiere
+      const enhancedBarbers = barbersToUse.map((b, index) => {
+        // Se è un User-Barber o un Barber
+        const isUserBarber = 'barber_shop_id' in b;
+        
+        let startHour, endHour;
+        if (isUserBarber) {
+          // Per User-Barber usa valori predefiniti o da shop
+          startHour = 9 + index;  // 9, 10, 11 a seconda dell'indice
+          endHour = 17 + index;   // 17, 18, 19 a seconda dell'indice
+        } else {
+          // Per Barber, usa i suoi orari
+          startHour = parseInt(b.opening_time?.split(':')[0] || 9);
+          endHour = parseInt(b.closing_time?.split(':')[0] || 17);
+        }
+        
+        return {
+          ...b,
+          workDays: [1, 2, 3, 4, 5, 6],  // Da lunedì a sabato
+          startHour,
+          endHour,
+          // Assicurati che ci sia un nome
+          name: b.name || 'Barbiere',
+          shop_name: b.shop_name || barber.shop_name
+        };
+      });
+      
+      setShopBarbers(enhancedBarbers);
+    } catch (error) {
+      console.error('Errore nel caricamento dei barbieri:', error);
+      
+      // Fallback con dati predefiniti (2 barbieri)
+      setShopBarbers([
+        {
+          id: 1,
+          name: "Mario Rossi",
+          shop_name: barber.shop_name,
+          barber_shop_id: barber.id,
+          workDays: [1, 2, 3, 4, 5],
+          startHour: 9,
+          endHour: 17
+        },
+        {
+          id: 2,
+          name: "Luca Bianchi",
+          shop_name: barber.shop_name,
+          barber_shop_id: barber.id,
+          workDays: [1, 2, 3, 4, 5, 6],
+          startHour: 10,
+          endHour: 19
+        }
+      ]);
+    } finally {
+      setLoadingBarbers(false);
+    }
+  };
+
+  // Carica gli slot orari disponibili dal server
+  const fetchAvailableTimeSlots = async (date) => {
+    if (!selectedBarber) return;
+    
+    setLoading(true);
+    
+    try {
+      console.log(`Fetching available slots for barber_id: ${selectedBarber.id}, date: ${date}`);
+      
+      // Add cache-busting parameter to prevent caching issues
+      const timestamp = new Date().getTime();
+      
+      // Usa una sola modalità di costruzione URL per tutte le piattaforme
+      // Importante: api-route usa "path=" seguito dagli altri parametri con "&"
+      const url = getApiPath('available-slots') + `&barber_id=${selectedBarber.id}&date=${date}&_=${timestamp}`;
+      
+      console.log('Requesting URL:', url);
+      
+      // Use the new direct API with no-cache headers
+      const response = await fetch(url, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      });
+      
+      // Handle specific error status codes
+      if (response.status === 400) {
+        // Try to get more detailed error information
+        const errorData = await response.json();
+        console.error('API 400 Bad Request details:', errorData);
+        
+        throw new Error(errorData.message || 'Invalid request parameters. The barber may not be available.');
+      }
+      
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status}`);
+      }
+      
+      const responseText = await response.text();
+      console.log('Raw API response:', responseText);
+      
+      // Parse the JSON response
+      const responseData = JSON.parse(responseText);
+      
+      // Extract slots from response
+      const availableSlots = responseData.slots || [];
+      
+      console.log(`Received ${availableSlots.length} available slots, checking booked status...`);
+      
+      // Debug log for booked slots
+      const bookedSlots = availableSlots.filter(slot => slot.isBooked);
+      console.log(`Found ${bookedSlots.length} booked slots:`, 
+        bookedSlots.map(slot => `${slot.time}${slot.appointmentId ? ` (ID: ${slot.appointmentId})` : ''}`));
+      
+      // Convert slots to component-compatible format
+      const formattedSlots = availableSlots.map(slot => ({
+        id: `${date}-${slot.time}`,
+        time: slot.time,
+        isBooked: slot.isBooked,
+        appointmentId: slot.appointmentId
+      }));
+      
+      // Update the state
+      setTimeSlots(formattedSlots);
+    } catch (error) {
+      console.error('Error loading available slots:', error);
+      
+      // Show specific error message
+      Alert.alert(
+        'Error',
+        error.message || 'Unable to load available time slots from the server.'
+      );
+      
+      // Fallback to local slot generation
+      console.log('Falling back to local slot generation');
+      generateTimeSlots(date);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fallback: Genera orari localmente se l'API non è disponibile
+  const generateTimeSlots = (date) => {
+    if (!selectedBarber) return;
+    
+    const slots = [];
+    const dateObj = new Date(date);
+    const dayOfWeek = dateObj.getDay(); // 0 (domenica) a 6 (sabato)
+    
+    // Converti da 0-6 (domenica-sabato) a 1-7 (lunedì-domenica)
+    const dayFormatted = dayOfWeek === 0 ? 7 : dayOfWeek;
+    
+    // Controlla se il barbiere lavora quel giorno
+    const isWorkDay = selectedBarber.workDays.includes(dayFormatted);
+    
+    if (isWorkDay) {
+      // Genera time slot dalle ore di inizio alle ore di fine del barbiere
+      for (let hour = selectedBarber.startHour; hour < selectedBarber.endHour; hour++) {
+        for (let minute = 0; minute < 60; minute += 15) {
+          // Tutti gli slot sono disponibili
+          const isBooked = false;
+          
+          const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+          
+          slots.push({
+            id: `${date}-${timeString}`,
+            time: timeString,
+            isBooked: isBooked
+          });
+        }
+      }
+    }
+    
+    setTimeSlots(slots);
+  };
+
+  // Gestisce la selezione di una data
+  const handleDateSelect = (day) => {
+    if (!selectedBarber) {
+      Alert.alert("Nessun barbiere selezionato", "Seleziona prima un barbiere.");
+      return;
+    }
+    
+    const selectedDateStr = day.dateString;
+    
+    // Aggiorna lo stato delle date selezionate
+    const updatedMarkedDates = {
+      [selectedDateStr]: {
+        selected: true,
+        selectedColor: '#007bff',
+      }
+    };
+    
+    setMarkedDates(updatedMarkedDates);
+    setSelectedDate(selectedDateStr);
+    setSelectedTimeSlot(null);
+    
+    // Carica gli slot orari per la data selezionata
+    fetchAvailableTimeSlots(selectedDateStr);
+  };
+
+  // Gestisce la selezione di uno slot orario
+  const handleTimeSlotSelect = (slot) => {
+    setSelectedTimeSlot(slot.id);
+  };
+
+  // Gestisce la selezione di un barbiere
+  const handleBarberSelect = (barber) => {
+    setSelectedBarber(barber);
+    setSelectedDate(null);
+    setSelectedTimeSlot(null);
+    setTimeSlots([]);
+    setMarkedDates({});
+  };
+
+  // Gestisce la prenotazione dell'appuntamento
+  const handleBooking = async () => {
+    if (!selectedTimeSlot || !selectedBarber || !selectedDate) {
+      Alert.alert(
+        "Missing Information",
+        "Please select a barber, date, and time slot to book an appointment.",
+        [{ text: "OK" }]
+      );
+      return;
+    }
+    
+    setLoading(true);
+    
+    try {
+      // Extract time from selected slot - Fix the time extraction
+      const selectedSlot = timeSlots.find(slot => slot.id === selectedTimeSlot);
+      const time = selectedSlot ? selectedSlot.time : '00:00';
+      
+      // Determine service type (in a complete version, this would be user-selected)
+      const serviceType = 'Haircut';
+      
+      console.log('Sending booking request to:', getApiPath('book-appointment'));
+      console.log('Booking time slot:', time);
+      
+      // Use the new direct API
+      const response = await fetch(getApiPath('book-appointment'), {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          barber_id: selectedBarber.id,
+          date: selectedDate,
+          time: time,
+          service_type: serviceType,
+          notes: 'Booking made through app',
+          client_name: 'Web Client',
+          client_email: 'client@example.com',
+          client_phone: '3334445566'
+        })
+      });
+      
+      // Try to parse response, handling case where it's not valid JSON
+      let responseData;
+      try {
+        const responseText = await response.text();
+        console.log('Raw server response:', responseText);
+        responseData = responseText ? JSON.parse(responseText) : {};
+      } catch (parseError) {
+        console.error('Error parsing JSON response:', parseError);
+        responseData = {};
+      }
+      
+      // Handle specific status codes
+      if (response.status === 409) {
+        // Conflict - Slot already booked
+        console.log("409 Conflict: Time slot already booked");
+        
+        // Get conflict details from response if available
+        const conflictDetails = responseData.debug ? 
+          ` (Conflict with appointment #${responseData.debug.appointment_id})` : '';
+        
+        // Refresh available slots to show updated availability
+        Alert.alert(
+          "Slot Unavailable",
+          `This time slot is no longer available. It may have been booked by someone else${conflictDetails}. The available slots have been refreshed.`,
+          [{ text: "OK" }]
+        );
+        
+        // Reset selected time slot and refresh the slots
+        setSelectedTimeSlot(null);
+        await fetchAvailableTimeSlots(selectedDate);
+        return;
+      }
+      
+      if (!response.ok) {
+        const errorMessage = responseData.message || responseData.error || `API Error: ${response.status}`;
+        console.error('API response failed:', { status: response.status, data: responseData });
+        throw new Error(errorMessage);
+      }
+      
+      // On successful booking, immediately update UI to show slot as booked
+      const appointmentId = responseData.appointment?.id;
+      console.log(`Booking successful, appointment ID: ${appointmentId}`);
+      
+      // Update the timeSlots state to mark the current selection as booked
+      setTimeSlots(prevSlots => {
+        return prevSlots.map(slot => {
+          if (slot.id === selectedTimeSlot) {
+            return {
+              ...slot,
+              isBooked: true,
+              appointmentId: appointmentId
+            };
+          }
+          return slot;
+        });
+      });
+      
+      // Then also refresh from server to ensure consistency
+      await fetchAvailableTimeSlots(selectedDate);
+      
+      // Reset selected time slot
+      setSelectedTimeSlot(null);
+      
+      Alert.alert(
+        "Booking Confirmed",
+        `Your appointment with ${selectedBarber.name} has been booked for ${selectedDate} at ${time}. Appointment ID: ${appointmentId || 'N/A'}`,
+        [
+          {
+            text: "OK",
+            onPress: () => navigation.goBack()
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Booking error:', error);
+      Alert.alert(
+        "Booking Error",
+        error.message || "An error occurred during booking. Please try again.",
+        [{ text: "OK" }]
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderTimeSlot = ({ item }) => {
+    const isSelected = selectedTimeSlot === item.id;
+    const isBooked = item.isBooked === true;
+    
+    // Debug logging per verificare lo stato dello slot
+    if (isBooked) {
+      console.log(`Slot ${item.time} è prenotato, ID: ${item.appointmentId || 'N/A'}`);
+    }
+    
+    return (
+      <TouchableOpacity
+        style={[
+          styles.timeSlot,
+          isBooked && styles.bookedTimeSlot,
+          isSelected && !isBooked && styles.selectedTimeSlot,
+        ]}
+        onPress={() => !isBooked && handleTimeSlotSelect(item)}
+        disabled={isBooked}
+        activeOpacity={isBooked ? 1 : 0.7}
+      >
+        <Text
+          style={[
+            styles.timeSlotText,
+            isBooked && styles.bookedTimeSlotText,
+            isSelected && !isBooked && styles.selectedTimeSlotText,
+          ]}
+        >
+          {item.time}
+        </Text>
+        {isBooked && (
+          <Ionicons name="close-circle" size={18} color="#cc0000" style={styles.bookedIcon} />
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  // Ottieni la data di oggi formattata YYYY-MM-DD
+  const getTodayDate = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Imposta minDate per il calendario (oggi)
+  const minDate = getTodayDate();
 
   return (
-    <ScrollView style={styles.container}>
+    <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
@@ -43,45 +533,107 @@ const BookAppointment = ({ route, navigation }) => {
         </View>
       </View>
 
-      <View style={styles.comingSoonContainer}>
-        <Ionicons name="construct" size={80} color="#007bff" />
-        <Text style={styles.comingSoonTitle}>Funzionalità in arrivo</Text>
-        <Text style={styles.comingSoonText}>
-          La prenotazione degli appuntamenti sarà disponibile a breve.
-          Questa funzionalità è attualmente in fase di sviluppo.
-        </Text>
-        <TouchableOpacity
-          style={styles.returnButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.returnButtonText}>Torna indietro</Text>
-        </TouchableOpacity>
-      </View>
+      <ScrollView style={styles.contentContainer}>
+        {/* Selezione del barbiere */}
+        <Text style={styles.sectionTitle}>Seleziona un barbiere</Text>
+        {loadingBarbers ? (
+          <ActivityIndicator size="large" color="#007bff" style={styles.loader} />
+        ) : (
+          <View style={styles.barberSelection}>
+            {shopBarbers.map(b => (
+              <TouchableOpacity
+                key={b.id}
+                style={[
+                  styles.barberOption,
+                  selectedBarber?.id === b.id && styles.selectedBarberOption
+                ]}
+                onPress={() => handleBarberSelect(b)}
+              >
+                <View style={styles.barberOptionContent}>
+                  <Ionicons 
+                    name="cut" 
+                    size={24} 
+                    color={selectedBarber?.id === b.id ? "#fff" : "#007bff"} 
+                    style={styles.barberIcon}
+                  />
+                  <View style={styles.barberOptionText}>
+                    <Text style={[
+                      styles.barberOptionName,
+                      selectedBarber?.id === b.id && styles.selectedBarberText
+                    ]}>
+                      {b.name}
+                    </Text>
+                    <Text style={[
+                      styles.barberOptionHours,
+                      selectedBarber?.id === b.id && styles.selectedBarberText
+                    ]}>
+                      Orario: {b.startHour}:00 - {b.endHour}:00
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
-      <View style={styles.featuresList}>
-        <Text style={styles.featuresTitle}>Funzionalità previste:</Text>
-        
-        <View style={styles.featureItem}>
-          <Ionicons name="calendar" size={24} color="#007bff" style={styles.featureIcon} />
-          <Text style={styles.featureText}>Selezione data e ora dell'appuntamento</Text>
-        </View>
-        
-        <View style={styles.featureItem}>
-          <Ionicons name="cut" size={24} color="#007bff" style={styles.featureIcon} />
-          <Text style={styles.featureText}>Selezione dei servizi desiderati</Text>
-        </View>
-        
-        <View style={styles.featureItem}>
-          <Ionicons name="cash" size={24} color="#007bff" style={styles.featureIcon} />
-          <Text style={styles.featureText}>Visualizzazione prezzi e durata</Text>
-        </View>
-        
-        <View style={styles.featureItem}>
-          <Ionicons name="notifications" size={24} color="#007bff" style={styles.featureIcon} />
-          <Text style={styles.featureText}>Promemoria e notifiche</Text>
-        </View>
-      </View>
-    </ScrollView>
+        {selectedBarber && (
+          <>
+            <Text style={styles.sectionTitle}>Seleziona una data</Text>
+            <View style={styles.calendarContainer}>
+              <Calendar
+                minDate={minDate}
+                maxDate={minDate.slice(0, 8) + String(Number(minDate.slice(8)) + 30)} // +30 giorni da oggi
+                markedDates={markedDates}
+                onDayPress={handleDateSelect}
+                theme={{
+                  selectedDayBackgroundColor: '#007bff',
+                  todayTextColor: '#007bff',
+                  arrowColor: '#007bff',
+                }}
+              />
+            </View>
+          </>
+        )}
+
+        {selectedDate && (
+          <>
+            <Text style={styles.sectionTitle}>Seleziona un orario</Text>
+            <View style={styles.timeSlotsContainer}>
+              {loading ? (
+                <ActivityIndicator size="large" color="#007bff" style={styles.loader} />
+              ) : timeSlots.length > 0 ? (
+                <FlatList
+                  data={timeSlots}
+                  renderItem={renderTimeSlot}
+                  keyExtractor={(item) => item.id}
+                  numColumns={4}
+                  scrollEnabled={false}
+                />
+              ) : (
+                <Text style={styles.noSlotsText}>
+                  Nessun orario disponibile per la data selezionata.
+                </Text>
+              )}
+            </View>
+
+            {!loading && timeSlots.length > 0 && (
+              <TouchableOpacity
+                style={[
+                  styles.bookButton,
+                  !selectedTimeSlot && styles.disabledButton
+                ]}
+                onPress={handleBooking}
+                disabled={!selectedTimeSlot}
+              >
+                <Text style={styles.bookButtonText}>
+                  Conferma Prenotazione
+                </Text>
+              </TouchableOpacity>
+            )}
+          </>
+        )}
+      </ScrollView>
+    </View>
   );
 };
 
@@ -144,74 +696,135 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
-  comingSoonContainer: {
-    backgroundColor: 'white',
-    margin: 15,
-    padding: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+  contentContainer: {
+    flex: 1,
+    padding: 15,
   },
-  comingSoonTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#333',
-    marginTop: 15,
-    marginBottom: 10,
-  },
-  comingSoonText: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 22,
+  barberSelection: {
     marginBottom: 20,
   },
-  returnButton: {
-    backgroundColor: '#007bff',
-    paddingVertical: 12,
-    paddingHorizontal: 25,
-    borderRadius: 5,
-  },
-  returnButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  featuresList: {
+  barberOption: {
     backgroundColor: 'white',
-    margin: 15,
-    padding: 15,
     borderRadius: 10,
+    padding: 15,
+    marginBottom: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-    marginBottom: 30,
   },
-  featuresTitle: {
+  selectedBarberOption: {
+    backgroundColor: '#007bff',
+  },
+  barberOptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  barberIcon: {
+    marginRight: 15,
+  },
+  barberOptionText: {
+    flex: 1,
+  },
+  barberOptionName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  barberOptionHours: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  selectedBarberText: {
+    color: 'white',
+  },
+  calendarContainer: {
+    backgroundColor: 'white',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
     marginBottom: 15,
+    marginTop: 10,
   },
-  featureItem: {
-    flexDirection: 'row',
+  timeSlotsContainer: {
+    backgroundColor: 'white',
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  timeSlot: {
+    flex: 1,
+    margin: 5,
+    padding: 12,
+    borderRadius: 5,
+    backgroundColor: '#e6f2ff',
     alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    justifyContent: 'center',
+    minHeight: 50,
   },
-  featureIcon: {
-    marginRight: 15,
+  selectedTimeSlot: {
+    backgroundColor: '#007bff',
   },
-  featureText: {
+  bookedTimeSlot: {
+    backgroundColor: '#ffcccc',
+    borderColor: '#ff0000',
+    borderWidth: 1,
+    opacity: 0.8,
+  },
+  timeSlotText: {
+    color: '#333',
+    fontSize: 14,
+  },
+  selectedTimeSlotText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  bookedTimeSlotText: {
+    color: '#cc0000',
+  },
+  bookedIcon: {
+    marginTop: 3,
+  },
+  loader: {
+    marginVertical: 20,
+  },
+  bookButton: {
+    backgroundColor: '#007bff',
+    paddingVertical: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  disabledButton: {
+    backgroundColor: '#cccccc',
+  },
+  bookButtonText: {
+    color: 'white',
     fontSize: 16,
-    color: '#555',
+    fontWeight: 'bold',
+  },
+  noSlotsText: {
+    textAlign: 'center',
+    fontSize: 16,
+    color: '#666',
+    padding: 20,
   },
 });
 

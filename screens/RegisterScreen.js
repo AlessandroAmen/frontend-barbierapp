@@ -83,6 +83,10 @@ const RegisterScreen = ({ navigation }) => {
       // Salva il token di autenticazione
       await AsyncStorage.setItem('userToken', data.access_token);
       await AsyncStorage.setItem('userData', JSON.stringify(data.user));
+      // Salva l'email dell'utente per il ProfileButton
+      await AsyncStorage.setItem('userEmail', email);
+      // Salva anche il ruolo dell'utente (sempre 'customer' per registrazione nuovo utente)
+      await AsyncStorage.setItem('userRole', 'customer');
 
       // Reimposta i campi
       setName('');
