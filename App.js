@@ -16,8 +16,7 @@ import BookAppointment from './screens/BookAppointment';
 import ModifyAppointment from './screens/ModifyAppointment';
 import Products from './screens/Products';
 import Contacts from './screens/Contacts';
-import ManagerDashboard from './screens/ManagerDashboard';
-import BarberDashboard from './screens/BarberDashboard';
+import AdminDashboard from './screens/AdminDashboard';
 
 // Importa il bottone profilo
 import ProfileButton from './components/ProfileButton';
@@ -53,26 +52,6 @@ const App = () => {
     bootstrapAsync();
   }, []);
 
-  // Determina la schermata iniziale in base al ruolo dell'utente
-  const getInitialRouteName = () => {
-    if (!userToken) return 'Login';
-    
-    if (userData) {
-      switch (userData.role) {
-        case 'admin':
-          return 'AdminDashboard';
-        case 'manager':
-          return 'ManagerDashboard';
-        case 'barber':
-          return 'BarberDashboard';
-        default:
-          return 'BarberSelector';
-      }
-    }
-    
-    return 'BarberSelector';
-  };
-
   // Configurazione header con ProfileButton
   const getScreenOptions = ({ route }) => {
     const isAuthScreen = route.name === 'Login' || route.name === 'Register';
@@ -102,7 +81,7 @@ const App = () => {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <NavigationContainer>
         <Stack.Navigator
-          initialRouteName={getInitialRouteName()}
+          initialRouteName={userToken ? (userData?.role === 'admin' ? 'AdminDashboard' : 'BarberSelector') : 'Login'}
           screenOptions={getScreenOptions}
         >
           <Stack.Screen 
@@ -160,21 +139,12 @@ const App = () => {
             options={{ headerShown: true, title: 'Contatti' }}
           />
           <Stack.Screen 
-            name="ManagerDashboard" 
-            component={ManagerDashboard} 
+            name="AdminDashboard" 
+            component={AdminDashboard} 
             options={{ 
               headerShown: true,
               headerBackVisible: false,
-              title: 'Dashboard Manager'
-            }}
-          />
-          <Stack.Screen 
-            name="BarberDashboard" 
-            component={BarberDashboard} 
-            options={{ 
-              headerShown: true,
-              headerBackVisible: false,
-              title: 'Dashboard Barbiere'
+              title: 'Dashboard Amministratore'
             }}
           />
         </Stack.Navigator>

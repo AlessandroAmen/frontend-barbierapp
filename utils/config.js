@@ -1,4 +1,3 @@
-
 // Application Configuration
 // This file centralizes all configuration values to avoid inconsistencies
 
@@ -10,18 +9,8 @@ import { Platform } from 'react-native';
 
 export const getServerUrl = () => {
   if (Platform.OS === 'android') {
-    // Check if we're running on a physical device or emulator
-    const isEmulator = Platform.constants?.Brand === 'google' || 
-                       Platform.constants?.isEmulator ||
-                       Platform.constants?.manufacturer?.includes('Google');
-                       
-    if (isEmulator) {
-      // Android emulator uses 10.0.2.2 to access host machine
-      return `http://10.0.2.2:${SERVER_PORT}`;
-    } else {
-      // Physical Android device on same WiFi network
-      return `http://192.168.1.70:${SERVER_PORT}`;
-    }
+    // Android emulator uses 10.0.2.2 to access host machine
+    return `http://10.0.2.2:${SERVER_PORT}`;
   } else if (Platform.OS === 'ios') {
     // iOS can use localhost
     return `http://localhost:${SERVER_PORT}`;
@@ -34,15 +23,20 @@ export const getServerUrl = () => {
 // Export commonly used URLs
 export const BASE_URL = getServerUrl();
 export const API_URL = `${BASE_URL}/api`;
-
-// Api endpoints supportano la route nuova
 export const DIRECT_API_URL = `${BASE_URL}/api.php`;
-export const ALTERNATIVE_API_URL = `${BASE_URL}/api-route`;
 
 // Helper function to construct API paths for the direct API
 export const getApiPath = (path) => {
-  // Usa sempre api-route per tutte le piattaforme per uniformità
-  return `${ALTERNATIVE_API_URL}?path=${path}`;
+  return `${DIRECT_API_URL}?path=${path}`;
+};
+
+// Endpoint APIs per le prenotazioni
+export const API_ENDPOINTS = {
+  AVAILABLE_SLOTS: 'available-slots',
+  BOOK_APPOINTMENT: 'book-appointment',
+  GET_APPOINTMENT_DETAILS: '/get-appointment-details.php',
+  DELETE_APPOINTMENT: '/delete-appointment.php',
+  MANAGER_BOOK_APPOINTMENT: '/manager-book-appointment.php'
 };
 
 // Log configuration for debugging

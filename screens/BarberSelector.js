@@ -344,15 +344,11 @@ const BarberSelector = ({ navigation }) => {
                 />
               )}
               <View style={styles.barberInfo}>
-                <Text style={styles.barberName}>{barber.name || 'Nome non disponibile'}</Text>
-                <Text style={styles.shopName}>{barber.shop_name || 'Negozio non specificato'}</Text>
-                <Text style={styles.barberAddress}>{barber.address || 'Indirizzo non disponibile'}</Text>
-                <Text style={styles.barberLocation}>
-                  {(barber.comune ? barber.comune : 'Comune non specificato')}
-                  {barber.comune && barber.provincia ? ', ' : ''}
-                  {barber.provincia || ''}
-                </Text>
-                <Text style={styles.barberPhone}>{barber.phone || 'Telefono non disponibile'}</Text>
+                <Text style={styles.barberName}>{barber.name}</Text>
+                <Text style={styles.shopName}>{barber.shop_name}</Text>
+                <Text style={styles.barberAddress}>{barber.address}</Text>
+                <Text style={styles.barberLocation}>{barber.comune}, {barber.provincia}</Text>
+                <Text style={styles.barberPhone}>{barber.phone}</Text>
               </View>
             </TouchableOpacity>
           ))}

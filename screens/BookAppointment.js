@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Calendar } from 'react-native-calendars';
-import { API_URL, NEW_API_URL, getApiPath } from '../utils/apiConfig';
+import { API_URL, BASE_URL, getApiPath, API_ENDPOINTS } from '../utils/apiConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BookAppointment = ({ route, navigation }) => {
@@ -27,17 +27,31 @@ const BookAppointment = ({ route, navigation }) => {
   const [shopBarbers, setShopBarbers] = useState([]);
   const [loadingBarbers, setLoadingBarbers] = useState(false);
   const [token, setToken] = useState(null);
+  const [userRole, setUserRole] = useState('client'); // Default a cliente normale
 
   useEffect(() => {
     // Carica il token e i barbieri all'avvio
     const setupComponent = async () => {
       const userToken = await AsyncStorage.getItem('userToken');
       setToken(userToken);
+      
+      // Carica i dati dell'utente per determinare il ruolo
+      const userDataString = await AsyncStorage.getItem('userData');
+      if (userDataString) {
+        const userData = JSON.parse(userDataString);
+        setUserRole(userData.role || 'client');
+      }
+      
       loadShopBarbers(userToken);
     };
     
     setupComponent();
   }, []);
+
+  // Verifica se l'utente è un gestore o admin
+  const isManager = () => {
+    return userRole === 'manager' || userRole === 'admin' || userRole === 'barber';
+  };
 
   // Carica i barbieri dal server
   const loadShopBarbers = async (userToken) => {
@@ -454,14 +468,220 @@ const BookAppointment = ({ route, navigation }) => {
     }
   };
 
+  // Gestisci l'eliminazione di un appuntamento
+  const handleDeleteAppointment = async (appointmentId) => {
+    if (!appointmentId) return;
+    
+    setLoading(true);
+    
+    try {
+      const response = await fetch(`${BASE_URL}${API_ENDPOINTS.DELETE_APPOINTMENT}?id=${appointmentId}`, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Errore nell'eliminazione: ${response.status}`);
+      }
+      
+      // Aggiorna gli slot dopo l'eliminazione
+      await fetchAvailableTimeSlots(selectedDate);
+      
+      Alert.alert(
+        "Prenotazione Eliminata",
+        "La prenotazione è stata eliminata con successo."
+      );
+    } catch (error) {
+      console.error('Errore durante l\'eliminazione:', error);
+      Alert.alert(
+        "Errore",
+        `Si è verificato un errore durante l'eliminazione: ${error.message}`
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Gestisci la prenotazione da parte del gestore
+  const handleManagerBooking = (slot) => {
+    // Nota: Alert.prompt è disponibile solo su iOS
+    // Su altre piattaforme, dovresti usare un componente personalizzato per l'input
+    if (Platform.OS === 'ios') {
+      Alert.prompt(
+        "Prenota per un Cliente",
+        "Inserisci il nome del cliente:",
+        [
+          { text: "Annulla", style: "cancel" },
+          {
+            text: "Prenota",
+            onPress: (clientName) => {
+              if (clientName && clientName.trim()) {
+                bookForClient(slot, clientName.trim());
+              } else {
+                Alert.alert("Errore", "Il nome del cliente è obbligatorio");
+              }
+            }
+          }
+        ],
+        "plain-text"
+      );
+    } else {
+      // Per piattaforme che non supportano Alert.prompt, usiamo un valore di default
+      // In una vera app, dovresti usare un modal input personalizzato
+      const clientName = "Cliente Walk-in";
+      Alert.alert(
+        "Prenota per un Cliente",
+        `Proseguire con la prenotazione per '${clientName}'?`,
+        [
+          { text: "Annulla", style: "cancel" },
+          {
+            text: "Prenota",
+            onPress: () => bookForClient(slot, clientName)
+          }
+        ]
+      );
+    }
+  };
+  
+  // Esegue la prenotazione per un cliente
+  const bookForClient = async (slot, clientName) => {
+    if (!selectedBarber || !selectedDate || !clientName) return;
+    
+    setLoading(true);
+    
+    try {
+      const response = await fetch(`${BASE_URL}${API_ENDPOINTS.MANAGER_BOOK_APPOINTMENT}`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          barber_id: selectedBarber.id,
+          date: selectedDate,
+          time: slot.time,
+          service_type: 'Taglio', // Default service type
+          client_name: clientName,
+          notes: 'Prenotazione effettuata dal gestore'
+        })
+      });
+      
+      if (!response.ok) {
+        const responseData = await response.json();
+        throw new Error(responseData.message || `Errore API: ${response.status}`);
+      }
+      
+      // Aggiorna gli slot dopo la prenotazione
+      await fetchAvailableTimeSlots(selectedDate);
+      
+      Alert.alert(
+        "Prenotazione Confermata",
+        `Appuntamento prenotato per ${clientName} il ${selectedDate} alle ${slot.time}.`
+      );
+    } catch (error) {
+      console.error('Errore durante la prenotazione:', error);
+      Alert.alert(
+        "Errore",
+        `Si è verificato un errore durante la prenotazione: ${error.message}`
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Ottieni dettagli di un appuntamento
+  const getAppointmentDetails = async (slot) => {
+    if (!selectedBarber || !selectedDate) return;
+    
+    setLoading(true);
+    
+    try {
+      const response = await fetch(`${BASE_URL}${API_ENDPOINTS.GET_APPOINTMENT_DETAILS}?barber_id=${selectedBarber.id}&date=${selectedDate}&time=${slot.time}`, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.found) {
+        const appointment = data.appointment;
+        
+        // Usa la funzione isManager per verificare il ruolo
+        if (isManager()) {
+          Alert.alert(
+            "Dettagli Prenotazione",
+            `Cliente: ${appointment.client_name}\nEmail: ${appointment.client_email}\nTelefono: ${appointment.client_phone}\nServizio: ${appointment.service_type}\nDurata: ${appointment.duration} min`,
+            [
+              {
+                text: "Chiudi",
+                style: "cancel"
+              },
+              {
+                text: "Elimina",
+                style: "destructive",
+                onPress: () => handleDeleteAppointment(appointment.id)
+              }
+            ]
+          );
+        } else {
+          Alert.alert(
+            "Slot Occupato",
+            "Questo orario è già prenotato."
+          );
+        }
+      } else {
+        // Lo slot è disponibile, mostra opzioni per il gestore
+        if (isManager()) {
+          Alert.alert(
+            "Slot Disponibile",
+            "Vuoi prenotare questo slot per un cliente?",
+            [
+              {
+                text: "No",
+                style: "cancel"
+              },
+              {
+                text: "Prenota",
+                onPress: () => handleManagerBooking(slot)
+              }
+            ]
+          );
+        } else {
+          // Se non è un gestore, seleziona lo slot normalmente
+          handleTimeSlotSelect(slot);
+        }
+      }
+    } catch (error) {
+      console.error('Errore nel recupero dei dettagli:', error);
+      Alert.alert(
+        "Errore",
+        `Si è verificato un errore nel recupero dei dettagli: ${error.message}`
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const renderTimeSlot = ({ item }) => {
     const isSelected = selectedTimeSlot === item.id;
     const isBooked = item.isBooked === true;
     
-    // Debug logging per verificare lo stato dello slot
-    if (isBooked) {
-      console.log(`Slot ${item.time} è prenotato, ID: ${item.appointmentId || 'N/A'}`);
-    }
+    // Modifica per gestori: quando si clicca su uno slot, mostra dettagli o permetti prenotazione
+    const handlePress = () => {
+      if (isManager()) {
+        // I gestori vedono i dettagli della prenotazione o possono prenotare
+        getAppointmentDetails(item);
+      } else {
+        // Gli utenti normali selezionano lo slot se è disponibile
+        if (!isBooked) {
+          handleTimeSlotSelect(item);
+        }
+      }
+    };
     
     return (
       <TouchableOpacity
@@ -470,9 +690,8 @@ const BookAppointment = ({ route, navigation }) => {
           isBooked && styles.bookedTimeSlot,
           isSelected && !isBooked && styles.selectedTimeSlot,
         ]}
-        onPress={() => !isBooked && handleTimeSlotSelect(item)}
-        disabled={isBooked}
-        activeOpacity={isBooked ? 1 : 0.7}
+        onPress={handlePress}
+        activeOpacity={0.7}
       >
         <Text
           style={[
@@ -484,7 +703,7 @@ const BookAppointment = ({ route, navigation }) => {
           {item.time}
         </Text>
         {isBooked && (
-          <Ionicons name="close-circle" size={18} color="#cc0000" style={styles.bookedIcon} />
+          <Ionicons name="person" size={18} color="#cc0000" style={styles.bookedIcon} />
         )}
       </TouchableOpacity>
     );
