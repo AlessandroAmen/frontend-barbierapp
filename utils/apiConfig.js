@@ -33,11 +33,14 @@ export const getApiPath = (path) => {
 // Endpoint APIs per le prenotazioni
 export const API_ENDPOINTS = {
   AVAILABLE_SLOTS: 'available-slots',
-  BOOK_APPOINTMENT: 'book-appointment',
+  BOOK_APPOINTMENT: '/book-appointment',
   GET_APPOINTMENT_DETAILS: '/get-appointment-details.php',
   DELETE_APPOINTMENT: '/delete-appointment.php',
   MANAGER_BOOK_APPOINTMENT: '/manager-book-appointment.php'
 };
+
+// Helper per chiamare le nuove API RESTful Laravel
+export const getLaravelApiPath = (path) => `${API_URL}${path}`;
 
 // Log configuration for debugging
 console.log('Platform:', Platform.OS);

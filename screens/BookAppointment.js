@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Calendar } from 'react-native-calendars';
-import { API_URL, BASE_URL, getApiPath, API_ENDPOINTS } from '../utils/apiConfig';
+import { API_URL, BASE_URL, getApiPath, API_ENDPOINTS, getLaravelApiPath } from '../utils/apiConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BookAppointment = ({ route, navigation }) => {
@@ -196,7 +196,7 @@ const BookAppointment = ({ route, navigation }) => {
       
       // Usa una sola modalità di costruzione URL per tutte le piattaforme
       // Importante: api-route usa "path=" seguito dagli altri parametri con "&"
-      const url = getApiPath('available-slots') + `&barber_id=${selectedBarber.id}&date=${date}&_=${timestamp}`;
+      const url = getLaravelApiPath(`/available-slots?barber_id=${selectedBarber.id}&date=${date}&_=${timestamp}`);
       
       console.log('Requesting URL:', url);
       
@@ -233,18 +233,23 @@ const BookAppointment = ({ route, navigation }) => {
       const availableSlots = responseData.slots || [];
       
       console.log(`Received ${availableSlots.length} available slots, checking booked status...`);
+      console.log('First booked slot example:', availableSlots.find(slot => slot.isBooked));
       
       // Debug log for booked slots
       const bookedSlots = availableSlots.filter(slot => slot.isBooked);
       console.log(`Found ${bookedSlots.length} booked slots:`, 
-        bookedSlots.map(slot => `${slot.time}${slot.appointmentId ? ` (ID: ${slot.appointmentId})` : ''}`));
+        bookedSlots.map(slot => `${slot.time}${slot.appointmentId ? ` (ID: ${slot.appointmentId})` : ''} - Client: ${slot.client_name || 'N/A'}`));
       
       // Convert slots to component-compatible format
       const formattedSlots = availableSlots.map(slot => ({
         id: `${date}-${slot.time}`,
         time: slot.time,
         isBooked: slot.isBooked,
-        appointmentId: slot.appointmentId
+        appointmentId: slot.appointmentId,
+        client_name: slot.client_name,
+        client_email: slot.client_email,
+        client_phone: slot.client_phone,
+        service_type: slot.service_type
       }));
       
       // Update the state
@@ -361,26 +366,40 @@ const BookAppointment = ({ route, navigation }) => {
       // Determine service type (in a complete version, this would be user-selected)
       const serviceType = 'Haircut';
       
-      console.log('Sending booking request to:', getApiPath('book-appointment'));
+      console.log('Sending booking request to:', getLaravelApiPath(API_ENDPOINTS.BOOK_APPOINTMENT));
       console.log('Booking time slot:', time);
       
-      // Use the new direct API
-      const response = await fetch(getApiPath('book-appointment'), {
+      // Recupera i dati dell'utente
+      const userDataString = await AsyncStorage.getItem('userData');
+      const userData = userDataString ? JSON.parse(userDataString) : null;
+      
+      // Prepara i dati della richiesta
+      const requestData = {
+        barber_id: selectedBarber.id,
+        date: selectedDate,
+        time: time,
+        service_type: serviceType,
+        notes: 'Booking made through app'
+      };
+      
+      // Se l'utente è autenticato, aggiungi il suo ID
+      if (userData && userData.id) {
+        requestData.user_id = userData.id;
+      } else {
+        // Se non è autenticato, usa i dati di default
+        requestData.client_name = 'Web Client';
+        requestData.client_email = 'client@example.com';
+        requestData.client_phone = '3334445566';
+      }
+      
+      // Usa la nuova API Laravel
+      const response = await fetch(getLaravelApiPath(API_ENDPOINTS.BOOK_APPOINTMENT), {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          barber_id: selectedBarber.id,
-          date: selectedDate,
-          time: time,
-          service_type: serviceType,
-          notes: 'Booking made through app',
-          client_name: 'Web Client',
-          client_email: 'client@example.com',
-          client_phone: '3334445566'
-        })
+        body: JSON.stringify(requestData)
       });
       
       // Try to parse response, handling case where it's not valid JSON
@@ -670,6 +689,11 @@ const BookAppointment = ({ route, navigation }) => {
     const isSelected = selectedTimeSlot === item.id;
     const isBooked = item.isBooked === true;
     
+    // Debug log per vedere i dati dello slot
+    if (isBooked) {
+      console.log('Rendering booked slot:', item);
+    }
+    
     // Modifica per gestori: quando si clicca su uno slot, mostra dettagli o permetti prenotazione
     const handlePress = () => {
       if (isManager()) {
@@ -703,7 +727,20 @@ const BookAppointment = ({ route, navigation }) => {
           {item.time}
         </Text>
         {isBooked && (
-          <Ionicons name="person" size={18} color="#cc0000" style={styles.bookedIcon} />
+          <>
+            {userRole === 'barber' ? (
+              <View style={styles.clientInfo}>
+                <Text style={styles.clientName}>
+                  {item.client_name ? item.client_name : 'Prenotato'}
+                </Text>
+                {item.client_email && (
+                  <Text style={styles.clientEmail}>{item.client_email}</Text>
+                )}
+              </View>
+            ) : (
+              <Ionicons name="person" size={18} color="#cc0000" style={styles.bookedIcon} />
+            )}
+          </>
         )}
       </TouchableOpacity>
     );
@@ -1044,6 +1081,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     padding: 20,
+  },
+  clientInfo: {
+    marginTop: 4,
+    alignItems: 'center',
+  },
+  clientName: {
+    fontSize: 12,
+    color: '#cc0000',
+    fontWeight: 'bold',
+  },
+  clientEmail: {
+    fontSize: 10,
+    color: '#cc0000',
   },
 });
 
