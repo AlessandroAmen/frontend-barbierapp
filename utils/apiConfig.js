@@ -34,7 +34,7 @@ export const getApiPath = (path) => {
 export const API_ENDPOINTS = {
   AVAILABLE_SLOTS: 'available-slots',
   BOOK_APPOINTMENT: '/book-appointment',
-  GET_APPOINTMENT_DETAILS: '/get-appointment-details.php',
+  GET_APPOINTMENT_DETAILS: '/get-appointment-details',
   DELETE_APPOINTMENT: '/delete-appointment.php',
   MANAGER_BOOK_APPOINTMENT: '/manager-book-appointment.php'
 };

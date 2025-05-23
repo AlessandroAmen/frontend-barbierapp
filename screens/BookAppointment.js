@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import {
   View,
   Text,
@@ -10,11 +10,88 @@ import {
   FlatList,
   Alert,
   Platform,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Calendar } from 'react-native-calendars';
 import { API_URL, BASE_URL, getApiPath, API_ENDPOINTS, getLaravelApiPath } from '../utils/apiConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Separate BookingModal component
+const BookingModal = memo(({ visible, onClose, onBook, selectedSlot }) => {
+  const [clientName, setClientName] = useState('');
+  const [clientPhone, setClientPhone] = useState('');
+  const [inputType, setInputType] = useState('name');
+
+  const handleSubmit = useCallback(() => {
+    if (inputType === 'name') {
+      if (clientName.trim()) {
+        setInputType('phone');
+      } else {
+        Alert.alert('Errore', 'Il nome del cliente è obbligatorio');
+      }
+    } else {
+      if (clientPhone.trim()) {
+        onBook(selectedSlot, clientName.trim(), clientPhone.trim());
+        setClientName('');
+        setClientPhone('');
+        setInputType('name');
+      } else {
+        Alert.alert('Errore', 'Il numero di telefono è obbligatorio');
+      }
+    }
+  }, [inputType, clientName, clientPhone, selectedSlot, onBook]);
+
+  const handleClose = useCallback(() => {
+    onClose();
+    setClientName('');
+    setClientPhone('');
+    setInputType('name');
+  }, [onClose]);
+
+  if (!visible) return null;
+
+  return (
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={handleClose}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>
+            {inputType === 'name' ? 'Nome Cliente' : 'Numero di Telefono'}
+          </Text>
+          <TextInput
+            style={styles.modalInput}
+            value={inputType === 'name' ? clientName : clientPhone}
+            onChangeText={inputType === 'name' ? setClientName : setClientPhone}
+            placeholder={inputType === 'name' ? 'Inserisci il nome' : 'Inserisci il numero'}
+            keyboardType={inputType === 'name' ? 'default' : 'phone-pad'}
+          />
+          <View style={styles.modalButtons}>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.cancelButton]}
+              onPress={handleClose}
+            >
+              <Text style={styles.modalButtonText}>Annulla</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.confirmButton]}
+              onPress={handleSubmit}
+            >
+              <Text style={[styles.modalButtonText, styles.confirmButtonText]}>
+                {inputType === 'name' ? 'Avanti' : 'Prenota'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+});
 
 const BookAppointment = ({ route, navigation }) => {
   const { barber } = route.params;
@@ -28,6 +105,12 @@ const BookAppointment = ({ route, navigation }) => {
   const [loadingBarbers, setLoadingBarbers] = useState(false);
   const [token, setToken] = useState(null);
   const [userRole, setUserRole] = useState('client'); // Default a cliente normale
+  const [showInputModal, setShowInputModal] = useState(false);
+  const [inputType, setInputType] = useState('name'); // 'name' or 'phone'
+  const [clientName, setClientName] = useState('');
+  const [clientPhone, setClientPhone] = useState('');
+  const [selectedSlot, setSelectedSlot] = useState(null);
+  const [showBookingModal, setShowBookingModal] = useState(false);
 
   useEffect(() => {
     // Carica il token e i barbieri all'avvio
@@ -565,13 +648,13 @@ const BookAppointment = ({ route, navigation }) => {
   };
   
   // Esegue la prenotazione per un cliente
-  const bookForClient = async (slot, clientName) => {
-    if (!selectedBarber || !selectedDate || !clientName) return;
+  const bookForClient = async (slot, clientName, clientPhone) => {
+    if (!selectedBarber || !selectedDate || !clientName || !clientPhone) return;
     
     setLoading(true);
     
     try {
-      const response = await fetch(`${BASE_URL}${API_ENDPOINTS.MANAGER_BOOK_APPOINTMENT}`, {
+      const response = await fetch(getLaravelApiPath(API_ENDPOINTS.BOOK_APPOINTMENT), {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -583,6 +666,8 @@ const BookAppointment = ({ route, navigation }) => {
           time: slot.time,
           service_type: 'Taglio', // Default service type
           client_name: clientName,
+          client_phone: clientPhone,
+          client_email: 'cliente@example.com', // Default email
           notes: 'Prenotazione effettuata dal gestore'
         })
       });
@@ -610,69 +695,62 @@ const BookAppointment = ({ route, navigation }) => {
     }
   };
   
-  // Ottieni dettagli di un appuntamento
+  const handleBookSlot = useCallback((slot, name, phone) => {
+    bookForClient(slot, name, phone);
+    setShowBookingModal(false);
+  }, []);
+
+  // Update getAppointmentDetails function
   const getAppointmentDetails = async (slot) => {
     if (!selectedBarber || !selectedDate) return;
     
     setLoading(true);
     
     try {
-      const response = await fetch(`${BASE_URL}${API_ENDPOINTS.GET_APPOINTMENT_DETAILS}?barber_id=${selectedBarber.id}&date=${selectedDate}&time=${slot.time}`, {
+      const url = getLaravelApiPath(`${API_ENDPOINTS.GET_APPOINTMENT_DETAILS}?barber_id=${selectedBarber.id}&date=${selectedDate}&time=${slot.time}`);
+      console.log('Fetching appointment details from:', url);
+      
+      const response = await fetch(url, {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json'
         }
       });
       
+      console.log('Response status:', response.status);
       const data = await response.json();
+      console.log('Response data:', data);
       
       if (response.ok && data.found) {
-        const appointment = data.appointment;
-        
-        // Usa la funzione isManager per verificare il ruolo
-        if (isManager()) {
-          Alert.alert(
-            "Dettagli Prenotazione",
-            `Cliente: ${appointment.client_name}\nEmail: ${appointment.client_email}\nTelefono: ${appointment.client_phone}\nServizio: ${appointment.service_type}\nDurata: ${appointment.duration} min`,
-            [
-              {
-                text: "Chiudi",
-                style: "cancel"
-              },
-              {
-                text: "Elimina",
-                style: "destructive",
-                onPress: () => handleDeleteAppointment(appointment.id)
-              }
-            ]
+        // Slot prenotato - mostra conferma per cancellazione
+        if (Platform.OS === 'web') {
+          const confirmed = window.confirm(
+            `Vuoi cancellare la prenotazione per ${data.appointment.client_name}?\nOrario: ${slot.time}\nServizio: ${data.appointment.service_type}`
           );
+          if (confirmed) {
+            handleDeleteAppointment(data.appointment.id);
+          }
         } else {
           Alert.alert(
-            "Slot Occupato",
-            "Questo orario è già prenotato."
-          );
-        }
-      } else {
-        // Lo slot è disponibile, mostra opzioni per il gestore
-        if (isManager()) {
-          Alert.alert(
-            "Slot Disponibile",
-            "Vuoi prenotare questo slot per un cliente?",
+            "Cancella Prenotazione",
+            `Vuoi cancellare la prenotazione per ${data.appointment.client_name}?\nOrario: ${slot.time}\nServizio: ${data.appointment.service_type}`,
             [
               {
                 text: "No",
                 style: "cancel"
               },
               {
-                text: "Prenota",
-                onPress: () => handleManagerBooking(slot)
+                text: "Sì, Cancella",
+                style: "destructive",
+                onPress: () => handleDeleteAppointment(data.appointment.id)
               }
             ]
           );
-        } else {
-          // Se non è un gestore, seleziona lo slot normalmente
-          handleTimeSlotSelect(slot);
         }
+      } else {
+        // Slot libero - mostra form di prenotazione
+        setSelectedSlot(slot);
+        setShowBookingModal(true);
       }
     } catch (error) {
       console.error('Errore nel recupero dei dettagli:', error);
@@ -694,19 +772,6 @@ const BookAppointment = ({ route, navigation }) => {
       console.log('Rendering booked slot:', item);
     }
     
-    // Modifica per gestori: quando si clicca su uno slot, mostra dettagli o permetti prenotazione
-    const handlePress = () => {
-      if (isManager()) {
-        // I gestori vedono i dettagli della prenotazione o possono prenotare
-        getAppointmentDetails(item);
-      } else {
-        // Gli utenti normali selezionano lo slot se è disponibile
-        if (!isBooked) {
-          handleTimeSlotSelect(item);
-        }
-      }
-    };
-    
     return (
       <TouchableOpacity
         style={[
@@ -714,7 +779,14 @@ const BookAppointment = ({ route, navigation }) => {
           isBooked && styles.bookedTimeSlot,
           isSelected && !isBooked && styles.selectedTimeSlot,
         ]}
-        onPress={handlePress}
+        onPress={() => {
+          console.log('Slot clicked:', item);
+          if (isManager()) {
+            getAppointmentDetails(item);
+          } else if (!isBooked) {
+            handleTimeSlotSelect(item);
+          }
+        }}
         activeOpacity={0.7}
       >
         <Text
@@ -889,6 +961,12 @@ const BookAppointment = ({ route, navigation }) => {
           </>
         )}
       </ScrollView>
+      <BookingModal
+        visible={showBookingModal}
+        onClose={() => setShowBookingModal(false)}
+        onBook={handleBookSlot}
+        selectedSlot={selectedSlot}
+      />
     </View>
   );
 };
@@ -1094,6 +1172,57 @@ const styles = StyleSheet.create({
   clientEmail: {
     fontSize: 10,
     color: '#cc0000',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 10,
+    padding: 20,
+    width: '90%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 5,
+    padding: 10,
+    marginBottom: 15,
+    fontSize: 16,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modalButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 5,
+    marginHorizontal: 5,
+  },
+  cancelButton: {
+    backgroundColor: '#f0f0f0',
+  },
+  confirmButton: {
+    backgroundColor: '#007bff',
+  },
+  modalButtonText: {
+    textAlign: 'center',
+    fontSize: 16,
+    color: '#333',
+  },
+  confirmButtonText: {
+    color: 'white',
   },
 });
 
