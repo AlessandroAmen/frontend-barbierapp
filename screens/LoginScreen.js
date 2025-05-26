@@ -13,74 +13,90 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../utils/apiConfig';
+import { handleAPIError } from '../utils/errorHandling';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('');
+  const [retryCount, setRetryCount] = useState(0);
+  const [isConnected, setIsConnected] = useState(false);
+  const maxRetries = 2;
+  const timeoutDuration = Platform.OS === 'android' ? 20000 : 10000; // 20s for Android, 10s for others
 
   // Test della connessione API all'avvio
   useEffect(() => {
-    testApiConnection();
+    const timer = setTimeout(() => {
+      testApiConnection();
+    }, 1000);
+    return () => clearTimeout(timer);
   }, []);
 
   // Funzione per testare la connessione API
   const testApiConnection = async () => {
+    let controller;
     try {
       setConnectionStatus('Verifica connessione...');
       
-      /* Commento la parte che genera l'errore 404
-      // Prima prova la rotta API
-      console.log('Test connessione API a:', `${API_URL}/android-test`);
+      const url = `${API_URL}/test-connection`;
+      console.log('Test connessione a:', url);
       
-      try {
-        const response = await fetch(`${API_URL}/android-test`, {
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-          },
-        });
-        
-        console.log('Test connessione API status:', response.status);
-        
-        if (response.ok) {
-          const data = await response.json();
-          console.log('Test connessione API risposta:', data);
-          setConnectionStatus('Connessione API OK');
-          return;
-        } else {
-          console.error('Test connessione API fallito:', response.status);
-        }
-      } catch (apiError) {
-        console.error('Errore test API:', apiError);
-      }
-      */
+      // Impostiamo un timeout più lungo per l'emulatore Android e aggiungiamo debug
+      controller = new AbortController();
+      console.log('Inizializing connection test with timeout:', Platform.OS === 'android' ? 60000 : 8000, 'ms');
+      const timeoutId = setTimeout(() => {
+        console.log('Connection timeout reached, aborting...');
+        controller.abort();
+      }, Platform.OS === 'android' ? 60000 : 8000);
       
-      // Utilizza direttamente la rotta web che funziona
-      const baseUrl = API_URL.replace('/api', '');
-      console.log('Test connessione web a:', `${baseUrl}/test-connection`);
-      
-      const webResponse = await fetch(`${baseUrl}/test-connection`, {
+      const startTime = Date.now();
+      console.log('Attempting fetch with timeout:', Platform.OS === 'android' ? 60000 : 8000, 'ms');
+      const response = await fetch(url, {
+        method: 'GET',
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Connection': 'keep-alive'
         },
+        signal: controller.signal,
+        mode: 'cors'
       });
+      const endTime = Date.now();
+      const responseTime = endTime - startTime;
       
-      console.log('Test connessione web status:', webResponse.status);
+      console.log('Test connessione status:', response.status);
       
-      if (webResponse.ok) {
-        const webData = await webResponse.json();
-        console.log('Test connessione web risposta:', webData);
-        setConnectionStatus('Connessione OK');
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Test connessione risposta:', data);
+        setConnectionStatus(`Connessione OK (${responseTime}ms)`);
       } else {
-        console.error('Test connessione web fallito:', webResponse.status);
-        setConnectionStatus(`Errore connessione: ${webResponse.status}`);
+        if (retryCount < maxRetries) {
+          console.log(`Ritentativo connessione ${retryCount + 1}/${maxRetries}`);
+          setRetryCount(prev => prev + 1);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          throw new Error('Riprovo connessione...');
+        }
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
     } catch (error) {
-      console.error('Test connessione errore generale:', error);
-      setConnectionStatus(`Errore connessione: ${error.message}`);
+      console.error('Test connessione errore:', error);
+      console.log('Network error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        platform: Platform.OS
+      });
+      const errorMessage = error.name === 'AbortError' 
+        ? 'Timeout della connessione dopo 30s. Assicurati che il server Laravel sia in esecuzione su http://10.0.2.2:8000'
+        : `Errore connessione: ${error.message}`;
+      setConnectionStatus(`Errore: ${errorMessage}`);
+    } finally {
+      if (controller) {
+        controller.abort(); // Puliamo il controller in caso di errore
+      }
     }
   };
 
@@ -91,14 +107,25 @@ const LoginScreen = ({ navigation }) => {
       return;
     }
 
+    const controller = new AbortController();
+    let timeoutId;
+
     try {
       setLoading(true);
-      
       console.log('Tentativo di login con:', { email });
       
+      // Reset del conteggio tentativi per nuova sessione di login
+      setRetryCount(0);
+      
       // Effettua la richiesta di login al backend Laravel
+      timeoutId = setTimeout(() => {
+        controller.abort();
+        console.log('Login request aborted due to timeout');
+      }, Platform.OS === 'android' ? 60000 : 15000); // 60s per Android, 15s per altri
+
       const response = await fetch(`${API_URL}/login`, {
         method: 'POST',
+        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -154,8 +181,31 @@ const LoginScreen = ({ navigation }) => {
       navigateBasedOnRole(data.user);
     } catch (error) {
       console.error('Errore login:', error);
-      Alert.alert('Errore di Login', error.message || 'Si è verificato un errore durante il login');
+      
+      if (error.name === 'AbortError') {
+        Alert.alert(
+          'Errore di Connessione',
+          'La richiesta sta impiegando troppo tempo. Verifica la tua connessione e riprova.',
+          [
+            {
+              text: 'Riprova',
+              onPress: () => {
+                if (retryCount < maxRetries) {
+                  setRetryCount(prev => prev + 1);
+                  handleLogin();
+                } else {
+                  Alert.alert('Errore', 'Numero massimo di tentativi raggiunto. Riprova più tardi.');
+                }
+              }
+            },
+            { text: 'Annulla', style: 'cancel' }
+          ]
+        );
+      } else {
+        Alert.alert('Errore di Login', handleAPIError(error) || 'Si è verificato un errore durante il login');
+      }
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };

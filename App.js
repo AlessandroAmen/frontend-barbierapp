@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Text, LogBox } from 'react-native';
+import { ErrorUtils } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as ExpoConstants from 'expo-constants';
 
@@ -23,10 +24,47 @@ import ProfileButton from './components/ProfileButton';
 
 const Stack = createNativeStackNavigator();
 
+const ErrorBoundary = ({ children }) => {
+  const [hasError, setHasError] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const handleError = (error) => {
+      console.error('App Error:', error);
+      setError(error);
+      setHasError(true);
+    };
+
+    // Gestione errori globale
+    const subscription = LogBox.ignoreLogs(['Possible Unhandled Promise Rejection']);
+    const errorHandler = ErrorUtils.getGlobalHandler();
+    ErrorUtils.setGlobalHandler((error, isFatal) => {
+      handleError(error);
+      errorHandler(error, isFatal);
+    });
+
+    return () => subscription.remove();
+  }, []);
+
+  if (hasError) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text>Qualcosa è andato storto. Riavvia l'app.</Text>
+        <Text style={{ fontSize: 12, color: 'gray', marginTop: 10 }}>
+          {error?.message || 'Errore sconosciuto'}
+        </Text>
+      </View>
+    );
+  }
+
+  return children;
+};
+
 const App = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [userToken, setUserToken] = useState(null);
   const [userData, setUserData] = useState(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     // Verifica se l'utente è già autenticato
@@ -43,10 +81,11 @@ const App = () => {
         }
       } catch (e) {
         console.error('Errore nel recupero del token:', e);
+        setError(e);
+      } finally {
+        setUserToken(token);
+        setIsLoading(false);
       }
-      
-      setUserToken(token);
-      setIsLoading(false);
     };
 
     bootstrapAsync();

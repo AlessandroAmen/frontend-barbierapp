@@ -2,20 +2,27 @@
 // This file centralizes all configuration values to avoid inconsistencies
 
 // Port configuration
-export const SERVER_PORT = 8000;
+export const SERVER_PORT = 8080;  // Porta alternativa per compatibilità con emulatore Android
+
+// Server IP per dispositivi sulla stessa rete WiFi
+export const LOCAL_SERVER_IP = '192.168.1.45';  // IP locale del server
 
 // API configuration based on platform
 import { Platform } from 'react-native';
 
 export const getServerUrl = () => {
   if (Platform.OS === 'android') {
-    // Android emulator uses 10.0.2.2 to access host machine
-    return `http://10.0.2.2:${SERVER_PORT}`;
+    // Per dispositivi Android sulla stessa rete WiFi
+    return `http://${LOCAL_SERVER_IP}:${SERVER_PORT}`;
   } else if (Platform.OS === 'ios') {
-    // iOS can use localhost
-    return `http://localhost:${SERVER_PORT}`;
+    if (__DEV__ && !Platform.isTVOS) {
+      // Per il simulatore iOS, usa localhost
+      return `http://localhost:${SERVER_PORT}`;
+    } 
+    // Per dispositivi iOS fisici sulla stessa rete WiFi
+    return `http://${LOCAL_SERVER_IP}:${SERVER_PORT}`;
   } else {
-    // Web or other platforms
+    // Web o altre piattaforme
     return `http://localhost:${SERVER_PORT}`;
   }
 };
