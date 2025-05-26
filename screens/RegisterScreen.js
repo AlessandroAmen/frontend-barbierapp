@@ -17,14 +17,22 @@ import { API_URL } from '../utils/apiConfig';
 const RegisterScreen = ({ navigation }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
     // Validazione base
-    if (!name || !email || !password) {
+    if (!name || !email || !phone || !password) {
       Alert.alert('Errore', 'Per favore compila tutti i campi');
+      return;
+    }
+
+    // Validazione numero di telefono
+    const phoneRegex = /^[0-9]{10}$/;
+    if (!phoneRegex.test(phone)) {
+      Alert.alert('Errore', 'Inserisci un numero di telefono valido (10 cifre)');
       return;
     }
 
@@ -53,6 +61,7 @@ const RegisterScreen = ({ navigation }) => {
         body: JSON.stringify({
           name,
           email,
+          phone,
           password,
           password_confirmation: confirmPassword,
         }),
@@ -131,6 +140,15 @@ const RegisterScreen = ({ navigation }) => {
             onChangeText={setEmail}
             autoCapitalize="none"
             keyboardType="email-address"
+          />
+          
+          <TextInput
+            style={styles.input}
+            placeholder="Numero di telefono"
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+            maxLength={10}
           />
           
           <TextInput

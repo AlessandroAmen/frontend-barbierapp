@@ -25,6 +25,8 @@ const BookingModal = memo(({ visible, onClose, onBook, selectedSlot }) => {
   const [inputType, setInputType] = useState('name');
 
   const handleSubmit = useCallback(() => {
+    console.log('handleSubmit called with:', { inputType, clientName, clientPhone });
+    
     if (inputType === 'name') {
       if (clientName.trim()) {
         setInputType('phone');
@@ -33,6 +35,7 @@ const BookingModal = memo(({ visible, onClose, onBook, selectedSlot }) => {
       }
     } else {
       if (clientPhone.trim()) {
+        console.log('Calling onBook with:', selectedSlot, clientName.trim(), clientPhone.trim());
         onBook(selectedSlot, clientName.trim(), clientPhone.trim());
         setClientName('');
         setClientPhone('');
@@ -442,41 +445,38 @@ const BookAppointment = ({ route, navigation }) => {
     setLoading(true);
     
     try {
-      // Extract time from selected slot - Fix the time extraction
+      // Extract time from selected slot
       const selectedSlot = timeSlots.find(slot => slot.id === selectedTimeSlot);
       const time = selectedSlot ? selectedSlot.time : '00:00';
       
-      // Determine service type (in a complete version, this would be user-selected)
-      const serviceType = 'Haircut';
-      
-      console.log('Sending booking request to:', getLaravelApiPath(API_ENDPOINTS.BOOK_APPOINTMENT));
-      console.log('Booking time slot:', time);
+      console.log('Sending booking request to:', `${BASE_URL}/book-appointment.php`);
+      console.log('Selected date:', selectedDate);
+      console.log('Selected time:', time);
       
       // Recupera i dati dell'utente
       const userDataString = await AsyncStorage.getItem('userData');
       const userData = userDataString ? JSON.parse(userDataString) : null;
       
-      // Prepara i dati della richiesta
+      // Prepara i dati della richiesta nel formato atteso dal backend
       const requestData = {
         barber_id: selectedBarber.id,
         date: selectedDate,
         time: time,
-        service_type: serviceType,
-        notes: 'Booking made through app'
+        service_type: 'Haircut',
+        notes: 'Booking made through app',
+        client_name: userData?.name || 'Cliente App',
+        client_email: userData?.email || 'client@example.com',
+        client_phone: userData?.phone || '1234567890'
       };
-      
-      // Se l'utente è autenticato, aggiungi il suo ID
+
       if (userData && userData.id) {
         requestData.user_id = userData.id;
-      } else {
-        // Se non è autenticato, usa i dati di default
-        requestData.client_name = 'Web Client';
-        requestData.client_email = 'client@example.com';
-        requestData.client_phone = '3334445566';
       }
       
-      // Usa la nuova API Laravel
-      const response = await fetch(getLaravelApiPath(API_ENDPOINTS.BOOK_APPOINTMENT), {
+      console.log('Request data:', requestData);
+      
+      // Usa il file PHP diretto
+      const response = await fetch(`${BASE_URL}/book-appointment.php`, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -485,84 +485,44 @@ const BookAppointment = ({ route, navigation }) => {
         body: JSON.stringify(requestData)
       });
       
-      // Try to parse response, handling case where it's not valid JSON
+      // Log della risposta grezza
+      const responseText = await response.text();
+      console.log('Raw server response:', responseText);
+      
+      // Prova a parsare la risposta JSON
       let responseData;
       try {
-        const responseText = await response.text();
-        console.log('Raw server response:', responseText);
         responseData = responseText ? JSON.parse(responseText) : {};
       } catch (parseError) {
         console.error('Error parsing JSON response:', parseError);
-        responseData = {};
-      }
-      
-      // Handle specific status codes
-      if (response.status === 409) {
-        // Conflict - Slot already booked
-        console.log("409 Conflict: Time slot already booked");
-        
-        // Get conflict details from response if available
-        const conflictDetails = responseData.debug ? 
-          ` (Conflict with appointment #${responseData.debug.appointment_id})` : '';
-        
-        // Refresh available slots to show updated availability
-        Alert.alert(
-          "Slot Unavailable",
-          `This time slot is no longer available. It may have been booked by someone else${conflictDetails}. The available slots have been refreshed.`,
-          [{ text: "OK" }]
-        );
-        
-        // Reset selected time slot and refresh the slots
-        setSelectedTimeSlot(null);
-        await fetchAvailableTimeSlots(selectedDate);
-        return;
+        throw new Error('Invalid server response');
       }
       
       if (!response.ok) {
-        const errorMessage = responseData.message || responseData.error || `API Error: ${response.status}`;
-        console.error('API response failed:', { status: response.status, data: responseData });
-        throw new Error(errorMessage);
+        throw new Error(responseData.message || `Server error: ${response.status}`);
       }
       
-      // On successful booking, immediately update UI to show slot as booked
-      const appointmentId = responseData.appointment?.id;
-      console.log(`Booking successful, appointment ID: ${appointmentId}`);
-      
-      // Update the timeSlots state to mark the current selection as booked
-      setTimeSlots(prevSlots => {
-        return prevSlots.map(slot => {
-          if (slot.id === selectedTimeSlot) {
-            return {
-              ...slot,
-              isBooked: true,
-              appointmentId: appointmentId
-            };
-          }
-          return slot;
-        });
-      });
-      
-      // Then also refresh from server to ensure consistency
-      await fetchAvailableTimeSlots(selectedDate);
-      
-      // Reset selected time slot
-      setSelectedTimeSlot(null);
-      
+      // Se arriviamo qui, la prenotazione è andata a buon fine
       Alert.alert(
-        "Booking Confirmed",
-        `Your appointment with ${selectedBarber.name} has been booked for ${selectedDate} at ${time}. Appointment ID: ${appointmentId || 'N/A'}`,
+        "Prenotazione Confermata",
+        `Appuntamento prenotato con ${selectedBarber.name} per il ${selectedDate} alle ${time}.`,
         [
           {
             text: "OK",
-            onPress: () => navigation.goBack()
+            onPress: () => {
+              // Ricarica gli slot dopo la prenotazione
+              fetchAvailableTimeSlots(selectedDate);
+              navigation.goBack();
+            }
           }
         ]
       );
+      
     } catch (error) {
       console.error('Booking error:', error);
       Alert.alert(
-        "Booking Error",
-        error.message || "An error occurred during booking. Please try again.",
+        "Errore Prenotazione",
+        error.message || "Si è verificato un errore durante la prenotazione. Riprova.",
         [{ text: "OK" }]
       );
     } finally {
@@ -649,46 +609,87 @@ const BookAppointment = ({ route, navigation }) => {
   
   // Esegue la prenotazione per un cliente
   const bookForClient = async (slot, clientName, clientPhone) => {
-    if (!selectedBarber || !selectedDate || !clientName || !clientPhone) return;
+    console.log('bookForClient called with:', { slot, clientName, clientPhone });
+    console.log('Current state:', { selectedBarber, selectedDate });
+    
+    if (!selectedBarber || !selectedDate || !clientName || !clientPhone || !slot) {
+      console.error('Missing required data:', {
+        selectedBarber: !!selectedBarber,
+        selectedDate: !!selectedDate,
+        clientName: !!clientName,
+        clientPhone: !!clientPhone,
+        slot: !!slot
+      });
+      Alert.alert("Errore", "Informazioni mancanti per la prenotazione");
+      return;
+    }
     
     setLoading(true);
+    console.log('Attempting to book appointment...');
     
     try {
-      const response = await fetch(getLaravelApiPath(API_ENDPOINTS.BOOK_APPOINTMENT), {
+      const isUserBarber = 'barber_shop_id' in selectedBarber;
+      const barberShopId = isUserBarber ? selectedBarber.barber_shop_id : selectedBarber.id;
+      
+      // Validate barber_shop_id
+      if (!barberShopId) {
+        Alert.alert("Errore", "Impossibile completare la prenotazione: dati del negozio mancanti");
+        setLoading(false);
+        return;
+      }
+
+      const requestData = {
+        barber_id: selectedBarber.id,
+        barber_shop_id: barberShopId,
+        date: selectedDate,
+        time: slot.time,
+        service_type: 'Haircut',
+        notes: 'Prenotazione effettuata tramite app',
+        client_name: clientName,
+        client_phone: clientPhone,
+        client_email: 'cliente@example.com'
+      };
+
+      const bookingUrl = `${BASE_URL}/book-appointment.php`;
+      const response = await fetch(bookingUrl, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          barber_id: selectedBarber.id,
-          date: selectedDate,
-          time: slot.time,
-          service_type: 'Taglio', // Default service type
-          client_name: clientName,
-          client_phone: clientPhone,
-          client_email: 'cliente@example.com', // Default email
-          notes: 'Prenotazione effettuata dal gestore'
-        })
+        body: JSON.stringify(requestData)
       });
-      
-      if (!response.ok) {
-        const responseData = await response.json();
-        throw new Error(responseData.message || `Errore API: ${response.status}`);
+
+      const responseText = await response.text();
+
+      let responseData;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch (parseError) {
+        throw new Error('Risposta del server non valida');
       }
-      
+
+      if (!response.ok) {
+        throw new Error(responseData.message || 'Errore nella prenotazione');
+      }
+
       // Aggiorna gli slot dopo la prenotazione
       await fetchAvailableTimeSlots(selectedDate);
-      
+
       Alert.alert(
         "Prenotazione Confermata",
-        `Appuntamento prenotato per ${clientName} il ${selectedDate} alle ${slot.time}.`
+        `Appuntamento prenotato per ${clientName} il ${selectedDate} alle ${slot.time}.`,
+        [{ text: "OK" }]
       );
+
+      // Chiudi il modal
+      setShowBookingModal(false);
+      
     } catch (error) {
-      console.error('Errore durante la prenotazione:', error);
+      console.error('Booking error:', error);
       Alert.alert(
         "Errore",
-        `Si è verificato un errore durante la prenotazione: ${error.message}`
+        error.message || "Si è verificato un errore durante la prenotazione"
       );
     } finally {
       setLoading(false);
@@ -696,9 +697,12 @@ const BookAppointment = ({ route, navigation }) => {
   };
   
   const handleBookSlot = useCallback((slot, name, phone) => {
+    if (!slot || !name || !phone) {
+      Alert.alert('Errore', 'Dati mancanti per la prenotazione');
+      return;
+    }
     bookForClient(slot, name, phone);
-    setShowBookingModal(false);
-  }, []);
+  }, [bookForClient]);
 
   // Update getAppointmentDetails function
   const getAppointmentDetails = async (slot) => {
@@ -708,7 +712,6 @@ const BookAppointment = ({ route, navigation }) => {
     
     try {
       const url = getLaravelApiPath(`${API_ENDPOINTS.GET_APPOINTMENT_DETAILS}?barber_id=${selectedBarber.id}&date=${selectedDate}&time=${slot.time}`);
-      console.log('Fetching appointment details from:', url);
       
       const response = await fetch(url, {
         headers: {
@@ -717,9 +720,7 @@ const BookAppointment = ({ route, navigation }) => {
         }
       });
       
-      console.log('Response status:', response.status);
       const data = await response.json();
-      console.log('Response data:', data);
       
       if (response.ok && data.found) {
         // Slot prenotato - mostra conferma per cancellazione
@@ -766,6 +767,7 @@ const BookAppointment = ({ route, navigation }) => {
   const renderTimeSlot = ({ item }) => {
     const isSelected = selectedTimeSlot === item.id;
     const isBooked = item.isBooked === true;
+    const isManagerUser = isManager();
     
     // Debug log per vedere i dati dello slot
     if (isBooked) {
@@ -781,10 +783,20 @@ const BookAppointment = ({ route, navigation }) => {
         ]}
         onPress={() => {
           console.log('Slot clicked:', item);
-          if (isManager()) {
-            getAppointmentDetails(item);
-          } else if (!isBooked) {
-            handleTimeSlotSelect(item);
+          if (isBooked) {
+            if (isManagerUser) {
+              // Solo i manager possono vedere/modificare le prenotazioni esistenti
+              getAppointmentDetails(item);
+            }
+          } else {
+            if (isManagerUser) {
+              // Manager usa il modal per prenotare
+              setSelectedSlot(item);
+              setShowBookingModal(true);
+            } else {
+              // Cliente normale seleziona lo slot
+              handleTimeSlotSelect(item);
+            }
           }
         }}
         activeOpacity={0.7}
@@ -805,8 +817,8 @@ const BookAppointment = ({ route, navigation }) => {
                 <Text style={styles.clientName}>
                   {item.client_name ? item.client_name : 'Prenotato'}
                 </Text>
-                {item.client_email && (
-                  <Text style={styles.clientEmail}>{item.client_email}</Text>
+                {item.client_phone && (
+                  <Text style={styles.clientPhone}>{item.client_phone}</Text>
                 )}
               </View>
             ) : (
@@ -1169,9 +1181,10 @@ const styles = StyleSheet.create({
     color: '#cc0000',
     fontWeight: 'bold',
   },
-  clientEmail: {
-    fontSize: 10,
+  clientPhone: {
+    fontSize: 12,
     color: '#cc0000',
+    fontStyle: 'italic'
   },
   modalOverlay: {
     flex: 1,
@@ -1226,4 +1239,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default BookAppointment; 
+export default BookAppointment;

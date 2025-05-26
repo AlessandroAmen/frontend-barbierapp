@@ -25,6 +25,9 @@ export const BASE_URL = getServerUrl();
 export const API_URL = `${BASE_URL}/api`;
 export const DIRECT_API_URL = `${BASE_URL}/api.php`;
 
+// Test connection URL
+export const TEST_CONNECTION_URL = `${API_URL}/test-connection`;
+
 // Helper function to construct API paths for the direct API
 export const getApiPath = (path) => {
   return `${DIRECT_API_URL}?path=${path}`;
