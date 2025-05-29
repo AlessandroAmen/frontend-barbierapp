@@ -5,21 +5,26 @@
 export const SERVER_PORT = 8080;  // Porta alternativa per compatibilità con emulatore Android
 
 // Server IP per dispositivi sulla stessa rete WiFi
-export const LOCAL_SERVER_IP = '192.168.1.45';  // IP locale del server
+export const LOCAL_SERVER_IP = '192.168.1.17';  // IP locale del server
 
 // API configuration based on platform
 import { Platform } from 'react-native';
 
 export const getServerUrl = () => {
   if (Platform.OS === 'android') {
-    // Per dispositivi Android sulla stessa rete WiFi
+    // Per dispositivi Android sulla stessa rete WiFi (fisici)
+    // o per emulatori Android che possono accedere all'host con l'IP locale.
     return `http://${LOCAL_SERVER_IP}:${SERVER_PORT}`;
   } else if (Platform.OS === 'ios') {
-    if (__DEV__ && !Platform.isTVOS) {
+    // In modalità sviluppo (__DEV__ è true con Expo Go e simulatori/dispositivi)
+    // e se è un simulatore iOS (Platform.isEmulator è true per i simulatori)
+    if (__DEV__ && Platform.isEmulator) {
       // Per il simulatore iOS, usa localhost
       return `http://localhost:${SERVER_PORT}`;
-    } 
-    // Per dispositivi iOS fisici sulla stessa rete WiFi
+    }
+    // Questo è il caso cruciale:
+    // Per dispositivi iOS fisici (anche in modalità sviluppo con Expo Go),
+    // DEVONO usare l'IP locale del tuo computer.
     return `http://${LOCAL_SERVER_IP}:${SERVER_PORT}`;
   } else {
     // Web o altre piattaforme

@@ -873,7 +873,10 @@ const BookAppointment = ({ route, navigation }) => {
         </View>
       </View>
 
-      <ScrollView style={styles.contentContainer}>
+      <ScrollView 
+        style={styles.contentContainer}
+        contentContainerStyle={styles.scrollViewContent}
+      >
         {/* Selezione del barbiere */}
         <Text style={styles.sectionTitle}>Seleziona un barbiere</Text>
         {loadingBarbers ? (
@@ -1044,7 +1047,10 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flex: 1,
+  },
+  scrollViewContent: {
     padding: 15,
+    paddingBottom: Platform.OS === 'android' ? 70 : 30, // Maggiore padding per Android
   },
   barberSelection: {
     marginBottom: 20,
@@ -1091,6 +1097,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 10,
     marginBottom: 20,
+    marginTop: 5, // Ridotto il margine superiore
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -1108,7 +1115,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderRadius: 10,
     padding: 15,
-    marginBottom: 20,
+    marginBottom: Platform.OS === 'android' ? 90 : 40, // Aumentato il margine inferiore su Android
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -1156,7 +1163,8 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     borderRadius: 8,
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: Platform.OS === 'android' ? 90 : 30, // Aumentato il margine inferiore su Android
+    marginHorizontal: 20, // Aggiunto margine orizzontale
   },
   disabledButton: {
     backgroundColor: '#cccccc',
